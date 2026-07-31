@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/cnpj/:cnpj",
+      "destination": "/api/cnpj/[cnpj]"
+    },
+    {
+      "source": "/api/ai/refine",
+      "destination": "/api/ai/refine"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

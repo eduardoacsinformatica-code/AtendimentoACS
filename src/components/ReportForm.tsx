@@ -162,20 +162,53 @@ export const ReportForm: React.FC<ReportFormProps> = ({
     setCnpjSuccess(null);
 
     try {
-      const response = await fetch(`/api/cnpj/${cleanCnpj}`);
-      const data = await response.json();
+      let clientName = '';
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Não foi possível encontrar este CNPJ.');
+      // 1. Try local Express or Vercel serverless function
+      try {
+        const response = await fetch(`/api/cnpj/${cleanCnpj}`);
+        if (response.ok) {
+          const data = await response.json();
+          clientName = data.nome_fantasia || data.razao_social || '';
+        }
+      } catch (apiErr) {
+        console.warn('API endpoint local não respondeu, tentando consulta direta pública...', apiErr);
       }
 
-      const clientName = data.nome_fantasia || data.razao_social || '';
+      // 2. Direct Browser Fallback A: BrasilAPI
+      if (!clientName) {
+        try {
+          const resBrasil = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);
+          if (resBrasil.ok) {
+            const dataBrasil = await resBrasil.json();
+            clientName = dataBrasil.nome_fantasia || dataBrasil.razao_social || '';
+          }
+        } catch (brasilErr) {
+          console.warn('Consulta direta BrasilAPI falhou:', brasilErr);
+        }
+      }
+
+      // 3. Direct Browser Fallback B: Minha Receita API
+      if (!clientName) {
+        try {
+          const resMinha = await fetch(`https://minhareceita.org/${cleanCnpj}`);
+          if (resMinha.ok) {
+            const dataMinha = await resMinha.json();
+            clientName = dataMinha.nome_fantasia || dataMinha.razao_social || '';
+          }
+        } catch (minhaErr) {
+          console.warn('Consulta direta Minha Receita falhou:', minhaErr);
+        }
+      }
+
       if (clientName) {
         setFormData((prev) => ({
           ...prev,
           cliente: clientName,
         }));
         setCnpjSuccess(`Cliente encontrado: ${clientName}`);
+      } else {
+        throw new Error('Não foi possível encontrar este CNPJ nas bases públicas da Receita Federal.');
       }
     } catch (err) {
       setCnpjError(
