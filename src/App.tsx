@@ -207,26 +207,16 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
         
         {activeTab === 'form' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            
-            {/* Left Column: Input Form (7 cols) */}
-            <div className="lg:col-span-7">
-              <ReportForm
-                formData={formData}
-                setFormData={setFormData}
-                settings={settings}
-                onOpenSnippets={(category) => setSnippetsCategory(category)}
-                onSaveReport={handleSaveReportToHistory}
-                isSavedSuccess={isSavedSuccess}
-                onResetForm={handleResetForm}
-              />
-            </div>
-
-            {/* Right Column: Live WhatsApp & Document Preview (5 cols) */}
-            <div className="lg:col-span-5">
-              <ReportPreview formData={formData} settings={settings} />
-            </div>
-
+          <div className="max-w-4xl mx-auto w-full">
+            <ReportForm
+              formData={formData}
+              setFormData={setFormData}
+              settings={settings}
+              onOpenSnippets={(category) => setSnippetsCategory(category)}
+              onSaveReport={handleSaveReportToHistory}
+              isSavedSuccess={isSavedSuccess}
+              onResetForm={handleResetForm}
+            />
           </div>
         ) : (
           /* History View Tab */

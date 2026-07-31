@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { ReportData, ReportStatus, ServiceType, TechSettings } from '../types';
 import { formatCNPJ, getTodayInputDate } from '../utils/formatters';
+import { WhatsAppShareModal } from './WhatsAppShareModal';
 import { 
   Building2, 
   User, 
@@ -24,7 +25,9 @@ import {
   Trash2,
   Maximize2,
   X,
-  UploadCloud
+  UploadCloud,
+  Send,
+  MessageSquare
 } from 'lucide-react';
 
 interface ReportFormProps {
@@ -58,6 +61,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
   // Compress and resize image to keep reports light and fast
   const compressImage = (file: File): Promise<string> => {
@@ -324,7 +328,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({
             className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center shadow-md ${
               isSavedSuccess
                 ? 'bg-emerald-500 text-slate-950 font-bold'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
             }`}
           >
             {isSavedSuccess ? (
@@ -338,6 +342,15 @@ export const ReportForm: React.FC<ReportFormProps> = ({
                 Salvar Histórico
               </>
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsWhatsAppModalOpen(true)}
+            className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs transition-all flex items-center shadow-lg shadow-emerald-950/40"
+          >
+            <Send className="w-3.5 h-3.5 mr-1.5" />
+            Enviar via WhatsApp
           </button>
         </div>
       </div>
@@ -848,6 +861,48 @@ export const ReportForm: React.FC<ReportFormProps> = ({
           />
         )}
       </div>
+
+      {/* Main Action Bar */}
+      <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-end gap-3">
+        <button
+          type="button"
+          onClick={onSaveReport}
+          className={`w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center border ${
+            isSavedSuccess
+              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+              : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+          }`}
+        >
+          {isSavedSuccess ? (
+            <>
+              <Check className="w-4 h-4 mr-1.5 stroke-[3] text-emerald-400" />
+              Salvo no Histórico!
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4 mr-1.5 text-slate-400" />
+              Salvar no Histórico
+            </>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsWhatsAppModalOpen(true)}
+          className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs transition-all flex items-center justify-center shadow-lg shadow-emerald-950/50"
+        >
+          <Send className="w-4 h-4 mr-2" />
+          Enviar Laudo no WhatsApp
+        </button>
+      </div>
+
+      {/* WhatsApp Share Modal */}
+      <WhatsAppShareModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => setIsWhatsAppModalOpen(false)}
+        reportData={formData}
+        settings={settings}
+      />
 
     </div>
   );
