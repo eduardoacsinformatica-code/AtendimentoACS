@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ReportData, SavedReport, TechSettings } from './types';
+import { ReportData, SavedReport, TechSettings, QuickSnippet } from './types';
+import { DEFAULT_SNIPPETS } from './data/snippets';
 import { getTodayInputDate } from './utils/formatters';
 import { Header } from './components/Header';
 import { ReportForm } from './components/ReportForm';
@@ -33,6 +34,16 @@ export default function App() {
       return saved ? JSON.parse(saved) : [];
     } catch (e) {
       return [];
+    }
+  });
+
+  // Custom Quick Snippets / Templates State
+  const [snippets, setSnippets] = useState<QuickSnippet[]>(() => {
+    try {
+      const saved = localStorage.getItem('tech_support_snippets');
+      return saved ? JSON.parse(saved) : DEFAULT_SNIPPETS;
+    } catch (e) {
+      return DEFAULT_SNIPPETS;
     }
   });
 
@@ -92,6 +103,36 @@ export default function App() {
       console.error('Erro ao salvar histórico:', e);
     }
   }, [history]);
+
+  // Sync snippets to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('tech_support_snippets', JSON.stringify(snippets));
+    } catch (e) {
+      console.error('Erro ao salvar modelos:', e);
+    }
+  }, [snippets]);
+
+  // Snippet Handlers (Add/Edit, Delete, Reset)
+  const handleSaveSnippet = (snippetToSave: QuickSnippet) => {
+    setSnippets((prev) => {
+      const exists = prev.some((s) => s.id === snippetToSave.id);
+      if (exists) {
+        return prev.map((s) => (s.id === snippetToSave.id ? snippetToSave : s));
+      } else {
+        return [snippetToSave, ...prev];
+      }
+    });
+  };
+
+  const handleDeleteSnippet = (snippetId: string) => {
+    setSnippets((prev) => prev.filter((s) => s.id !== snippetId));
+  };
+
+  const handleResetSnippets = () => {
+    setSnippets(DEFAULT_SNIPPETS);
+    localStorage.removeItem('tech_support_snippets');
+  };
 
   // Save Settings
   const handleSaveSettings = (newSettings: TechSettings) => {
@@ -201,6 +242,7 @@ export default function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onNewReport={handleResetForm}
         onLoadDemo={handleLoadDemo}
+        onOpenSnippets={() => setSnippetsCategory('fato')}
       />
 
       {/* Main Container */}
@@ -248,6 +290,10 @@ export default function App() {
         onClose={() => setSnippetsCategory(null)}
         category={snippetsCategory || 'fato'}
         onSelectSnippet={handleInsertSnippet}
+        snippets={snippets}
+        onSaveSnippet={handleSaveSnippet}
+        onDeleteSnippet={handleDeleteSnippet}
+        onResetSnippets={handleResetSnippets}
       />
 
       {/* Footer */}

@@ -5,7 +5,7 @@ import {
   Settings, 
   Sparkles, 
   PlusCircle, 
-  HelpCircle,
+  BookOpen,
   ShieldCheck
 } from 'lucide-react';
 
@@ -16,6 +16,7 @@ interface HeaderProps {
   onOpenSettings: () => void;
   onNewReport: () => void;
   onLoadDemo: () => void;
+  onOpenSnippets?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -25,6 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onNewReport,
   onLoadDemo,
+  onOpenSnippets,
 }) => {
   return (
     <header className="bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-30 shadow-md">
@@ -74,6 +76,18 @@ export const Header: React.FC<HeaderProps> = ({
               <Sparkles className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
               <span>Exemplo</span>
             </button>
+
+            {/* Manage Snippets Button */}
+            {onOpenSnippets && (
+              <button
+                onClick={onOpenSnippets}
+                className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+                title="Gerenciar Modelos de Texto Rápidos"
+              >
+                <BookOpen className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
+                <span className="hidden sm:inline">Modelos</span>
+              </button>
+            )}
 
             {/* Tab Switcher: Form vs History */}
             <div className="bg-slate-950 p-1 rounded-xl border border-slate-800 flex items-center space-x-1">
