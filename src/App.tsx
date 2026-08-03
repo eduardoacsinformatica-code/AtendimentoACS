@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ReportData, SavedReport, TechSettings, QuickSnippet } from './types';
 import { DEFAULT_SNIPPETS } from './data/snippets';
-import { getTodayInputDate } from './utils/formatters';
+import { getTodayInputDate, generateAutoTicketNumber } from './utils/formatters';
 import { Header } from './components/Header';
 import { ReportForm } from './components/ReportForm';
 import { ReportPreview } from './components/ReportPreview';
@@ -13,7 +13,9 @@ const DEFAULT_SETTINGS: TechSettings = {
   defaultTecnico: 'Luis Eduardo',
   defaultEmpresa: 'ACS Informática - Suporte Técnico',
   autoFormatCnpj: true,
-  whatsappFormatStyle: 'padrao',
+  whatsappFormatStyle: 'detalhado',
+  movideskToken: '75762c40-5399-4b83-b958-c265fbf5d6fb',
+  movideskDomain: 'acsautomacao.movidesk.com',
 };
 
 export default function App() {
@@ -58,14 +60,17 @@ export default function App() {
 
   // Initial Form State
   const initialFormState: ReportData = {
-    ticket: '12345',
+    ticket: '',
     cliente: '',
     cnpj: '',
-    tecnico: settings.defaultTecnico || 'Luis Eduardo',
+    tecnico: '',
     acompanhado: '',
     data: getTodayInputDate(),
     status: 'CONCLUIDO',
     tipoAtendimento: 'PRESENCIAL',
+    tipoAutomacao: '',
+    modeloAutomacao: '',
+    descricaoChamado: '',
     fato: '',
     diagnostico: '',
     observacoes: '',
@@ -143,10 +148,22 @@ export default function App() {
   // Reset Form
   const handleResetForm = () => {
     const fresh: ReportData = {
-      ...initialFormState,
-      tecnico: settings.defaultTecnico || 'Luis Eduardo',
-      empresaAssinatura: settings.defaultEmpresa || 'ACS Informática - Suporte Técnico',
+      ticket: '',
+      cliente: '',
+      cnpj: '',
+      tecnico: '',
+      acompanhado: '',
       data: getTodayInputDate(),
+      status: 'CONCLUIDO',
+      tipoAtendimento: 'PRESENCIAL',
+      descricaoChamado: '',
+      fato: '',
+      diagnostico: '',
+      observacoes: '',
+      incluirAssinatura: true,
+      empresaAssinatura: settings.defaultEmpresa || 'ACS Informática - Suporte Técnico',
+      whatsappDestinatario: '',
+      fotos: [],
     };
     setFormData(fresh);
     localStorage.removeItem('tech_support_draft');

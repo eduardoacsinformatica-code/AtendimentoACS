@@ -1,5 +1,6 @@
 import React from 'react';
 import { TechSettings } from '../types';
+import { DEFAULT_TECNICOS } from '../data/tecnicos';
 import { X, Save, Settings as SettingsIcon, Check } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -66,18 +67,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           
           {/* Default Technician Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Nome do Técnico Padrão
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-300">
+                Nome do Técnico Padrão
+              </label>
+              <div className="flex items-center space-x-1">
+                {DEFAULT_TECNICOS.map((tech) => (
+                  <button
+                    key={tech}
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, defaultTecnico: tech })
+                    }
+                    className={`text-[10px] px-2 py-0.5 rounded-md border font-medium transition-colors ${
+                      formData.defaultTecnico === tech
+                        ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
+                    }`}
+                  >
+                    {tech}
+                  </button>
+                ))}
+              </div>
+            </div>
             <input
               type="text"
+              list="settings-tecnicos-list"
               value={formData.defaultTecnico}
               onChange={(e) =>
                 setFormData({ ...formData, defaultTecnico: e.target.value })
               }
-              placeholder="Ex: Luis Eduardo"
+              placeholder="Ex: Luis Eduardo ou Eduardo Visgueira"
               className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
             />
+            <datalist id="settings-tecnicos-list">
+              {DEFAULT_TECNICOS.map((tech) => (
+                <option key={tech} value={tech} />
+              ))}
+            </datalist>
             <p className="text-[11px] text-slate-500 mt-1">
               Este nome será preenchido automaticamente ao criar novos relatórios.
             </p>
@@ -100,54 +127,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <p className="text-[11px] text-slate-500 mt-1">
               Rodapé exibido ao final da mensagem e no laudo impresso.
             </p>
-          </div>
-
-          {/* WhatsApp Formatting Preference */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              Estilo de Formatação do WhatsApp
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  setFormData({ ...formData, whatsappFormatStyle: 'padrao' })
-                }
-                className={`p-2.5 rounded-xl border text-xs font-medium text-center transition-all ${
-                  formData.whatsappFormatStyle === 'padrao'
-                    ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                }`}
-              >
-                Padrão
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setFormData({ ...formData, whatsappFormatStyle: 'detalhado' })
-                }
-                className={`p-2.5 rounded-xl border text-xs font-medium text-center transition-all ${
-                  formData.whatsappFormatStyle === 'detalhado'
-                    ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                }`}
-              >
-                Detalhado
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setFormData({ ...formData, whatsappFormatStyle: 'compacto' })
-                }
-                className={`p-2.5 rounded-xl border text-xs font-medium text-center transition-all ${
-                  formData.whatsappFormatStyle === 'compacto'
-                    ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                }`}
-              >
-                Compacto
-              </button>
-            </div>
           </div>
 
           {/* Auto Format CNPJ Toggle */}

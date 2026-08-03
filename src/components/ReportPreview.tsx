@@ -190,6 +190,16 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
                 <span className="text-[10px] uppercase font-bold text-slate-500 block">Modalidade</span>
                 <span className="text-slate-800">{tipoLabel}</span>
               </div>
+              {(formData.tipoAutomacao || formData.modeloAutomacao) && (
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-500 block">Automação</span>
+                  <span className="font-semibold text-slate-900">
+                    {formData.tipoAutomacao ? `${formData.tipoAutomacao}` : ''}
+                    {formData.tipoAutomacao && formData.modeloAutomacao ? ' - ' : ''}
+                    {formData.modeloAutomacao ? `${formData.modeloAutomacao}` : ''}
+                  </span>
+                </div>
+              )}
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-500 block">Status</span>
                 <span className="font-bold text-slate-900 flex items-center">
@@ -198,10 +208,22 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
               </div>
             </div>
 
+            {/* Descrição do Chamado Box */}
+            {formData.descricaoChamado && (
+              <div className="space-y-1">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-800 border-b border-slate-200 pb-1">
+                  1. Descrição do Chamado / Atendimento
+                </h4>
+                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50/50 p-2.5 rounded border border-slate-100">
+                  {formData.descricaoChamado}
+                </p>
+              </div>
+            )}
+
             {/* Fato Constatado Box */}
             <div className="space-y-1">
               <h4 className="font-bold text-xs uppercase tracking-wider text-slate-800 border-b border-slate-200 pb-1">
-                1. Fato Constatado
+                {formData.descricaoChamado ? '2' : '1'}. Fato Constatado
               </h4>
               <p className="text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50/50 p-2.5 rounded border border-slate-100">
                 {formData.fato || 'Sem registros.'}
@@ -211,7 +233,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
             {/* Diagnóstico Box */}
             <div className="space-y-1">
               <h4 className="font-bold text-xs uppercase tracking-wider text-slate-800 border-b border-slate-200 pb-1">
-                2. Diagnóstico e Ações Realizadas
+                {formData.descricaoChamado ? '3' : '2'}. Diagnóstico e Ações Realizadas
               </h4>
               <p className="text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50/50 p-2.5 rounded border border-slate-100">
                 {formData.diagnostico || 'Sem registros.'}
@@ -222,7 +244,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
             {formData.observacoes && (
               <div className="space-y-1">
                 <h4 className="font-bold text-xs uppercase tracking-wider text-slate-800 border-b border-slate-200 pb-1">
-                  3. Observações e Recomendações
+                  {formData.descricaoChamado ? '4' : '3'}. Observações e Recomendações
                 </h4>
                 <p className="text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50/50 p-2.5 rounded border border-slate-100">
                   {formData.observacoes}

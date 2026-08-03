@@ -36,6 +36,16 @@ export function getTodayInputDate(): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+/**
+ * Generates an automatic 14-digit numerical ticket number based on timestamp (YYYYMMDDhhmmss)
+ */
+export function generateAutoTicketNumber(): string {
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+  return `${dateStr}${timeStr}`;
+}
+
 export const STATUS_LABELS: Record<string, { label: string; badgeClass: string; icon: string }> = {
   CONCLUIDO: {
     label: 'Concluído',
@@ -79,87 +89,57 @@ export function buildWhatsAppMessage(data: ReportData, settings?: TechSettings):
   const statusInfo = STATUS_LABELS[data.status] || { label: data.status, icon: '📋' };
   const tipoLabel = TIPO_ATENDIMENTO_LABELS[data.tipoAtendimento] || data.tipoAtendimento;
 
-  const formatStyle = settings?.whatsappFormatStyle || 'padrao';
+  let msg = `=============================\n`;
+  msg += `🛠️ *RELATÓRIO DE ATENDIMENTO TÉCNICO*\n`;
+  msg += `=============================\n\n`;
+  msg += `🔖 *Ticket/Chamado:* ${data.ticket || 'Não informado'}\n`;
+  msg += `🏢 *Cliente:* ${data.cliente || 'Não informado'}\n`;
+  if (data.cnpj) msg += `📄 *CNPJ:* ${data.cnpj}\n`;
+  msg += `👨‍💻 *Técnico Responsável:* ${data.tecnico || 'Não informado'}\n`;
+  if (data.acompanhado) msg += `👥 *Acompanhado por:* ${data.acompanhado}\n`;
+  msg += `📅 *Data do Atendimento:* ${dataFormatada}\n`;
+  msg += `📍 *Modalidade:* ${tipoLabel}\n`;
+  if (data.tipoAutomacao || data.modeloAutomacao) {
+    const automacaoStr = [data.tipoAutomacao, data.modeloAutomacao].filter(Boolean).join(' - ');
+    msg += `🤖 *Automação:* ${automacaoStr}\n`;
+  }
+  msg += `${statusInfo.icon} *Status:* ${statusInfo.label}\n\n`;
 
-  if (formatStyle === 'compacto') {
-    let msg = `*REL. SUPORTE #${data.ticket || 'S/N'}*\n`;
-    msg += `*Cliente:* ${data.cliente || 'Não informado'}\n`;
-    msg += `*Data:* ${dataFormatada} | *Tipo:* ${tipoLabel} | *Status:* ${statusInfo.label}\n`;
-    if (data.tecnico) msg += `*Técnico:* ${data.tecnico}\n`;
-    msg += `\n*Fato:* ${data.fato || 'Nenhum'}\n`;
-    msg += `\n*Ações:* ${data.diagnostico || 'Nenhuma'}\n`;
-    if (data.observacoes) msg += `\n*Obs:* ${data.observacoes}\n`;
-    if (data.incluirAssinatura && (data.empresaAssinatura || settings?.defaultEmpresa)) {
-      msg += `\n_${data.empresaAssinatura || settings?.defaultEmpresa}_`;
-    }
-    return msg;
+  if (data.descricaoChamado) {
+    msg += `-----------------------------\n`;
+    msg += `🛠️ *DESCRIÇÃO DO CHAMADO*\n`;
+    msg += `-----------------------------\n`;
+    msg += `${data.descricaoChamado}\n\n`;
   }
 
-  if (formatStyle === 'detalhado') {
-    let msg = `=============================\n`;
-    msg += `🛠️ *RELATÓRIO DE ATENDIMENTO TÉCNICO*\n`;
-    msg += `=============================\n\n`;
-    msg += `🔖 *Ticket/Chamado:* ${data.ticket || 'Não informado'}\n`;
-    msg += `🏢 *Cliente:* ${data.cliente || 'Não informado'}\n`;
-    if (data.cnpj) msg += `📄 *CNPJ:* ${data.cnpj}\n`;
-    msg += `👨‍💻 *Técnico Responsável:* ${data.tecnico || 'Não informado'}\n`;
-    if (data.acompanhado) msg += `👥 *Acompanhado por:* ${data.acompanhado}\n`;
-    msg += `📅 *Data do Atendimento:* ${dataFormatada}\n`;
-    msg += `📍 *Modalidade:* ${tipoLabel}\n`;
-    msg += `${statusInfo.icon} *Status:* ${statusInfo.label}\n\n`;
+  msg += `-----------------------------\n`;
+  msg += `⚠️ *FATO CONSTATADO*\n`;
+  msg += `-----------------------------\n`;
+  msg += `${data.fato || 'Sem registro.'}\n\n`;
 
-    msg += `-----------------------------\n`;
-    msg += `⚠️ *FATO CONSTATADO*\n`;
-    msg += `-----------------------------\n`;
-    msg += `${data.fato || 'Sem registro.'}\n\n`;
-
-    msg += `-----------------------------\n`;
-    msg += `🔍 *DIAGNÓSTICO E AÇÕES REALIZADAS*\n`;
-    msg += `-----------------------------\n`;
-    msg += `${data.diagnostico || 'Sem registro.'}\n\n`;
-
-    if (data.observacoes) {
-      msg += `-----------------------------\n`;
-      msg += `📌 *OBSERVAÇÕES E RECOMENDAÇÕES*\n`;
-      msg += `-----------------------------\n`;
-      msg += `${data.observacoes}\n\n`;
-    }
-
-    if (data.incluirAssinatura) {
-      msg += `=============================\n`;
-      msg += `*${data.empresaAssinatura || settings?.defaultEmpresa || 'Atendimento Técnico'}*\n`;
-      msg += `=============================`;
-    }
-    return msg;
-  }
-
-  // Standard (Padrão) format - matches the original template structure plus enhanced formatting!
-  let msg = `*REL. ATENDIMENTO*\n`;
-  msg += `*Ticket:* ${data.ticket || 'N/A'}\n`;
-  msg += `*Cliente:* ${data.cliente || 'N/A'}\n`;
-  msg += `*CNPJ:* ${data.cnpj || 'N/A'}\n`;
-  msg += `*Técnico:* ${data.tecnico || 'N/A'}\n`;
-  msg += `*Acompanhado por:* ${data.acompanhado || 'N/A'}\n`;
-  msg += `*Data do Atendimento:* ${dataFormatada}\n`;
-  msg += `*Tipo de Atendimento:* ${tipoLabel}\n`;
-  msg += `*Status:* ${statusInfo.label}\n\n`;
-
-  msg += `*FATO CONSTATADO*\n`;
-  msg += `${data.fato || 'Nenhum'}\n\n`;
-
-  msg += `*DIAGNÓSTICO E AÇÕES REALIZADAS*\n`;
-  msg += `${data.diagnostico || 'Nenhum'}`;
+  msg += `-----------------------------\n`;
+  msg += `🔍 *DIAGNÓSTICO E AÇÕES REALIZADAS*\n`;
+  msg += `-----------------------------\n`;
+  msg += `${data.diagnostico || 'Sem registro.'}\n\n`;
 
   if (data.observacoes) {
-    msg += `\n\n*OBSERVAÇÕES*\n${data.observacoes}`;
+    msg += `-----------------------------\n`;
+    msg += `📌 *OBSERVAÇÕES E RECOMENDAÇÕES*\n`;
+    msg += `-----------------------------\n`;
+    msg += `${data.observacoes}\n\n`;
   }
 
   if (data.fotos && data.fotos.length > 0) {
-    msg += `\n\n📷 *FOTOS / EVIDÊNCIAS:* ${data.fotos.length} foto(s) anexada(s) ao laudo técnico.`;
+    msg += `-----------------------------\n`;
+    msg += `📷 *EVIDÊNCIAS FOTOGRÁFICAS*\n`;
+    msg += `-----------------------------\n`;
+    msg += `${data.fotos.length} foto(s) anexada(s) ao laudo técnico.\n\n`;
   }
 
-  if (data.incluirAssinatura && (data.empresaAssinatura || settings?.defaultEmpresa)) {
-    msg += `\n\n_${data.empresaAssinatura || settings?.defaultEmpresa}_`;
+  if (data.incluirAssinatura) {
+    msg += `=============================\n`;
+    msg += `*${data.empresaAssinatura || settings?.defaultEmpresa || 'Atendimento Técnico'}*\n`;
+    msg += `=============================`;
   }
 
   return msg;

@@ -1,7 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { ReportData, ReportStatus, ServiceType, TechSettings } from '../types';
-import { formatCNPJ, getTodayInputDate } from '../utils/formatters';
+import { formatCNPJ, getTodayInputDate, generateAutoTicketNumber } from '../utils/formatters';
+import { DEFAULT_TECNICOS } from '../data/tecnicos';
 import { WhatsAppShareModal } from './WhatsAppShareModal';
+import { MovideskImportModal } from './MovideskImportModal';
 import { 
   Building2, 
   User, 
@@ -25,9 +27,12 @@ import {
   Trash2,
   Maximize2,
   X,
+  List,
   UploadCloud,
   Send,
-  MessageSquare
+  MessageSquare,
+  Lock,
+  Cpu
 } from 'lucide-react';
 
 interface ReportFormProps {
@@ -62,6 +67,26 @@ export const ReportForm: React.FC<ReportFormProps> = ({
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+
+  // Movidesk Integration State
+  const [isMovideskModalOpen, setIsMovideskModalOpen] = useState(false);
+  const [isImportingMovidesk, setIsImportingMovidesk] = useState(false);
+  const [isTicketImported, setIsTicketImported] = useState(false);
+  const [movideskMessage, setMovideskMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Auto-complete Tecnicos State
+  const [showTecnicoDropdown, setShowTecnicoDropdown] = useState(false);
+
+  const availableTecnicos = Array.from(
+    new Set([
+      ...DEFAULT_TECNICOS,
+      ...(settings?.defaultTecnico ? [settings.defaultTecnico] : []),
+    ])
+  ).filter(Boolean);
+
+  const filteredTecnicos = availableTecnicos.filter((t) =>
+    t.toLowerCase().includes((formData.tecnico || '').toLowerCase())
+  );
 
   // Compress and resize image to keep reports light and fast
   const compressImage = (file: File): Promise<string> => {
@@ -225,8 +250,88 @@ export const ReportForm: React.FC<ReportFormProps> = ({
 
   // Quick Ticket Generator
   const handleGenerateTicket = () => {
-    const randomTicket = Math.floor(10000 + Math.random() * 90000).toString();
-    handleChange('ticket', randomTicket);
+    setIsTicketImported(false);
+    const autoTicket = generateAutoTicketNumber();
+    handleChange('ticket', autoTicket);
+  };
+
+  // Open Movidesk Modal
+  const handleImportMovidesk = () => {
+    setIsMovideskModalOpen(true);
+  };
+
+  // Direct Movidesk Import by Ticket Number
+  const handleImportMovideskDirect = async () => {
+    const ticketNum = formData.ticket ? formData.ticket.trim() : '';
+    if (!ticketNum) {
+      // If field is empty, open the search modal as fallback
+      setIsMovideskModalOpen(true);
+      return;
+    }
+
+    setIsImportingMovidesk(true);
+    setMovideskMessage(null);
+
+    try {
+      const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
+      const res = await fetch(`/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}&token=${encodeURIComponent(token)}`);
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Chamado #${ticketNum} não foi encontrado no Movidesk.`);
+      }
+
+      const data = await res.json();
+      
+      setFormData((prev) => ({
+        ...prev,
+        ticket: ticketNum || data.ticket || prev.ticket,
+        cliente: data.cliente || prev.cliente,
+        cnpj: data.cnpj ? formatCNPJ(data.cnpj) : prev.cnpj,
+        tecnico: '', // Deixa em branco para o usuário preencher
+        acompanhado: data.acompanhado || prev.acompanhado,
+        descricaoChamado: data.descricaoChamado || prev.descricaoChamado,
+        fato: data.fato !== undefined ? data.fato : '',
+        status: (data.status as ReportStatus) || prev.status,
+        data: data.data || prev.data,
+      }));
+
+      setIsTicketImported(true);
+
+      setMovideskMessage({
+        type: 'success',
+        text: `Chamado #${data.ticket} importado com sucesso! Cliente: ${data.cliente || 'OK'}`,
+      });
+      setTimeout(() => setMovideskMessage(null), 7000);
+    } catch (err: any) {
+      setMovideskMessage({
+        type: 'error',
+        text: err.message || 'Erro ao importar chamado do Movidesk.',
+      });
+    } finally {
+      setIsImportingMovidesk(false);
+    }
+  };
+
+  const handleSelectMovideskTicket = (ticketData: Partial<ReportData>) => {
+    setFormData((prev) => ({
+      ...prev,
+      ticket: ticketData.ticket || prev.ticket,
+      cliente: ticketData.cliente || prev.cliente,
+      cnpj: ticketData.cnpj ? formatCNPJ(ticketData.cnpj) : prev.cnpj,
+      tecnico: '', // Deixa em branco para o usuário preencher
+      acompanhado: ticketData.acompanhado || prev.acompanhado,
+      descricaoChamado: ticketData.descricaoChamado || prev.descricaoChamado,
+      fato: ticketData.fato !== undefined ? ticketData.fato : '',
+      status: (ticketData.status as ReportStatus) || prev.status,
+      data: ticketData.data || prev.data,
+    }));
+    setIsTicketImported(true);
+    setMovideskMessage({
+      type: 'success',
+      text: `Chamado #${ticketData.ticket} importado do Movidesk!`,
+    });
+    setTimeout(() => setMovideskMessage(null), 5000);
   };
 
   // Quick Date Helpers
@@ -296,6 +401,16 @@ export const ReportForm: React.FC<ReportFormProps> = ({
     }
   };
 
+  const handleClearForm = () => {
+    setCnpjError(null);
+    setCnpjSuccess(null);
+    setAiErrorMessage(null);
+    setMovideskMessage(null);
+    setPreviewPhoto(null);
+    setIsTicketImported(false);
+    onResetForm();
+  };
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-6">
       
@@ -314,7 +429,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({
         <div className="flex items-center space-x-2">
           <button
             type="button"
-            onClick={onResetForm}
+            onClick={handleClearForm}
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-medium border border-slate-700 transition-colors flex items-center"
             title="Limpar formulário"
           >
@@ -368,18 +483,54 @@ export const ReportForm: React.FC<ReportFormProps> = ({
             <button
               type="button"
               onClick={handleGenerateTicket}
-              className="text-[10px] text-emerald-400 hover:underline font-normal"
+              className="text-[10px] text-slate-400 hover:text-slate-200 font-normal"
             >
               + Gerar Nº
             </button>
           </label>
-          <input
-            type="text"
-            value={formData.ticket}
-            onChange={(e) => handleChange('ticket', e.target.value)}
-            placeholder="Ex: 12345"
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
-          />
+          <div className="relative flex items-center space-x-1.5">
+            <input
+              type="text"
+              value={formData.ticket}
+              onChange={(e) => handleChange('ticket', e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleImportMovideskDirect();
+                }
+              }}
+              placeholder="Ex: 20260731000057"
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
+            />
+            <button
+              type="button"
+              onClick={handleImportMovideskDirect}
+              disabled={isImportingMovidesk}
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-slate-950 font-bold text-xs rounded-xl transition-all flex items-center shrink-0 shadow-md shadow-emerald-950/40"
+              title="Importar dados do chamado diretamente do Movidesk"
+            >
+              {isImportingMovidesk ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <UploadCloud className="w-3.5 h-3.5 mr-1" />
+                  Importar
+                </>
+              )}
+            </button>
+          </div>
+          {movideskMessage && (
+            <p className={`text-[11px] mt-1 flex items-center ${
+              movideskMessage.type === 'success' ? 'text-emerald-400' : 'text-rose-400'
+            }`}>
+              {movideskMessage.type === 'success' ? (
+                <Check className="w-3 h-3 mr-1 shrink-0" />
+              ) : (
+                <AlertCircle className="w-3 h-3 mr-1 shrink-0" />
+              )}
+              {movideskMessage.text}
+            </p>
+          )}
         </div>
 
         {/* Cliente */}
@@ -445,18 +596,79 @@ export const ReportForm: React.FC<ReportFormProps> = ({
         </div>
 
         {/* Técnico */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center">
-            <User className="w-3.5 h-3.5 text-slate-400 mr-1" />
-            Técnico:
-          </label>
-          <input
-            type="text"
-            value={formData.tecnico}
-            onChange={(e) => handleChange('tecnico', e.target.value)}
-            placeholder="Nome do técnico responsável"
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
-          />
+        <div className="relative">
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-semibold text-slate-300 flex items-center">
+              <User className="w-3.5 h-3.5 text-slate-400 mr-1" />
+              Técnico Responsável:
+            </label>
+            <div className="flex items-center space-x-1">
+              {availableTecnicos.map((tech) => (
+                <button
+                  key={tech}
+                  type="button"
+                  onClick={() => handleChange('tecnico', tech)}
+                  className={`text-[10px] px-2 py-0.5 rounded-md border font-medium transition-colors ${
+                    formData.tecnico === tech
+                      ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
+                  }`}
+                  title={`Selecionar ${tech}`}
+                >
+                  {tech}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="relative">
+            <input
+              type="text"
+              list="lista-tecnicos"
+              value={formData.tecnico}
+              onFocus={() => setShowTecnicoDropdown(true)}
+              onBlur={() => setTimeout(() => setShowTecnicoDropdown(false), 200)}
+              onChange={(e) => {
+                handleChange('tecnico', e.target.value);
+                setShowTecnicoDropdown(true);
+              }}
+              placeholder="Digite o nome (Ex: Luis Eduardo, Eduardo Visgueira)"
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
+            />
+
+            <datalist id="lista-tecnicos">
+              {availableTecnicos.map((tech) => (
+                <option key={tech} value={tech} />
+              ))}
+            </datalist>
+
+            {/* Dropdown Suggestions */}
+            {showTecnicoDropdown && filteredTecnicos.length > 0 && (
+              <div className="absolute z-30 left-0 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-xl overflow-hidden py-1">
+                <div className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider bg-slate-950/50 flex justify-between items-center">
+                  <span>Técnicos Reconhecidos</span>
+                  <span className="text-[9px] text-slate-500 font-normal">Clique para selecionar</span>
+                </div>
+                {filteredTecnicos.map((tech) => (
+                  <button
+                    key={tech}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleChange('tecnico', tech);
+                      setShowTecnicoDropdown(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-emerald-950/60 hover:text-emerald-300 flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <span className="font-medium">{tech}</span>
+                    {formData.tecnico === tech && (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Acompanhado Por */}
@@ -574,6 +786,131 @@ export const ReportForm: React.FC<ReportFormProps> = ({
           <span>{aiErrorMessage}</span>
         </div>
       )}
+
+      {/* Tipo e Modelo da Automação */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-bold text-slate-200 uppercase tracking-wide flex items-center">
+            <Cpu className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
+            Automação (Tipo e Modelo):
+          </label>
+          {(formData.tipoAutomacao || formData.modeloAutomacao) && (
+            <button
+              type="button"
+              onClick={() => {
+                handleChange('tipoAutomacao', '');
+                handleChange('modeloAutomacao', '');
+              }}
+              className="text-[10px] text-slate-400 hover:text-slate-200 underline transition-colors"
+            >
+              Limpar Seleção
+            </button>
+          )}
+        </div>
+
+        {/* Tipo de Automação (Com Fio / Sem Fio) */}
+        <div>
+          <span className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+            Tipo de Conexão:
+          </span>
+          <div className="flex items-center space-x-2">
+            {['Com Fio', 'Sem Fio'].map((tipo) => {
+              const isSelected = formData.tipoAutomacao === tipo;
+              return (
+                <button
+                  key={tipo}
+                  type="button"
+                  onClick={() =>
+                    handleChange('tipoAutomacao', isSelected ? '' : tipo)
+                  }
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition-all flex items-center justify-center space-x-1.5 ${
+                    isSelected
+                      ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 font-semibold shadow-sm'
+                      : 'bg-slate-950 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                  }`}
+                >
+                  <span>{tipo === 'Com Fio' ? '🔌' : '📡'}</span>
+                  <span>{tipo}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Botões dos Modelos de Automação */}
+        <div>
+          <span className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+            Modelo da Automação:
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              'CBC05',
+              'CBC06',
+              'Horustech',
+              'Concept',
+              'Hiro',
+              'Eztech Vision',
+              'Eztech Firecourt Plus',
+            ].map((model) => {
+              const isSelected = formData.modeloAutomacao === model;
+              return (
+                <button
+                  key={model}
+                  type="button"
+                  onClick={() =>
+                    handleChange('modeloAutomacao', isSelected ? '' : model)
+                  }
+                  className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all ${
+                    isSelected
+                      ? 'bg-emerald-950/90 border-emerald-500 text-emerald-300 font-semibold shadow-sm'
+                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-slate-100 hover:border-slate-700'
+                  }`}
+                >
+                  {model}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Textarea 0: DESCRIÇÃO DO CHAMADO / ATENDIMENTO */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-bold text-slate-200 tracking-wide uppercase flex items-center">
+            <FileText className="w-3.5 h-3.5 mr-1 text-emerald-400" />
+            DESCRIÇÃO DO CHAMADO / ATENDIMENTO:
+          </label>
+          {isTicketImported && (
+            <div className="flex items-center space-x-2">
+              <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-medium flex items-center">
+                <Lock className="w-3 h-3 mr-1" /> Importado (Bloqueado)
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsTicketImported(false)}
+                className="text-[10px] text-slate-400 hover:text-slate-200 underline"
+                title="Clique para destravar a edição manual"
+              >
+                Desbloquear
+              </button>
+            </div>
+          )}
+        </div>
+        <textarea
+          rows={3}
+          value={formData.descricaoChamado || ''}
+          onChange={(e) => handleChange('descricaoChamado', e.target.value)}
+          readOnly={isTicketImported}
+          disabled={isTicketImported}
+          placeholder="Descrição inicial do chamado do Movidesk ou escopo do atendimento (Ex: Realizar a verificação dos sensores de uma bomba...)"
+          className={`w-full border rounded-xl p-3 text-sm leading-relaxed resize-y transition-colors ${
+            isTicketImported
+              ? 'bg-slate-950/60 border-slate-800 text-slate-400 cursor-not-allowed select-none'
+              : 'bg-slate-950 border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500'
+          }`}
+        />
+      </div>
 
       {/* Textarea 1: FATO CONSTATADO */}
       <div className="space-y-1.5">
@@ -902,6 +1239,14 @@ export const ReportForm: React.FC<ReportFormProps> = ({
         onClose={() => setIsWhatsAppModalOpen(false)}
         reportData={formData}
         settings={settings}
+      />
+
+      {/* Movidesk Import Modal */}
+      <MovideskImportModal
+        isOpen={isMovideskModalOpen}
+        onClose={() => setIsMovideskModalOpen(false)}
+        settings={settings}
+        onSelectTicket={handleSelectMovideskTicket}
       />
 
     </div>
