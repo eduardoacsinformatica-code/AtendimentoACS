@@ -117,20 +117,106 @@ async function startServer() {
     }
   });
 
+  // Helper function to decode common HTML entities
+  const decodeHtmlEntities = (str: string): string => {
+    if (!str) return "";
+    return str
+      .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
+      .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+      .replace(/&aacute;/gi, "á")
+      .replace(/&Aacute;/gi, "Á")
+      .replace(/&agrave;/gi, "à")
+      .replace(/&Agrave;/gi, "À")
+      .replace(/&acirc;/gi, "â")
+      .replace(/&Acirc;/gi, "Â")
+      .replace(/&atilde;/gi, "ã")
+      .replace(/&Atilde;/gi, "Ã")
+      .replace(/&auml;/gi, "ä")
+      .replace(/&Auml;/gi, "Ä")
+      .replace(/&eacute;/gi, "é")
+      .replace(/&Eacute;/gi, "É")
+      .replace(/&egrave;/gi, "è")
+      .replace(/&Egrave;/gi, "È")
+      .replace(/&ecirc;/gi, "ê")
+      .replace(/&Ecirc;/gi, "Ê")
+      .replace(/&iacute;/gi, "í")
+      .replace(/&Iacute;/gi, "Í")
+      .replace(/&oacute;/gi, "ó")
+      .replace(/&Oacute;/gi, "Ó")
+      .replace(/&otilde;/gi, "õ")
+      .replace(/&Otilde;/gi, "Õ")
+      .replace(/&ocirc;/gi, "ô")
+      .replace(/&Ocirc;/gi, "Ô")
+      .replace(/&uacute;/gi, "ú")
+      .replace(/&Uacute;/gi, "Ú")
+      .replace(/&ccedil;/gi, "ç")
+      .replace(/&Ccedil;/gi, "Ç")
+      .replace(/&ndash;/gi, "–")
+      .replace(/&mdash;/gi, "—")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&quot;/gi, '"')
+      .replace(/&apos;|&#39;/gi, "'");
+  };
+
   // Helper function to strip HTML and extract clean text
   const stripHtml = (html: string) => {
     if (!html) return "";
-    return html
+    const clean = html
       .replace(/<br\s*[\/]?>/gi, "\n")
       .replace(/<\/p>/gi, "\n\n")
-      .replace(/<[^>]+>/g, "")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
+      .replace(/<\/div>/gi, "\n")
+      .replace(/<\/tr>/gi, "\n")
+      .replace(/<[^>]+>/g, "");
+
+    return decodeHtmlEntities(clean)
+      .replace(/\r\n/g, "\n")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
+  };
+
+  // Helper function to extract ONLY the text below "Descrição do Atendimento:"
+  const extractOnlyDescription = (text: string) => {
+    if (!text) return "";
+    let clean = text.trim();
+
+    // 1. Check for "Descrição do Atendimento:" or variations (with optional emojis/bullets)
+    const matchDesc = clean.match(
+      /(?:(?:⚒️|🛠️|📝|📌|🔧|📋|▶️|\*|•)?\s*)?(?:Descri[çc][ãa]o\s+(?:do\s+Atendimento|do\s+Chamado|de\s+Atendimento|do\s+Servi[çc]o|do\s+Problema)|Descri[çc][ãa]o):\s*([\s\S]+)/i
+    );
+
+    if (matchDesc && matchDesc[1].trim()) {
+      clean = matchDesc[1].trim();
+    } else {
+      // 2. If no explicit marker, filter out top header lines (Agendamento Técnico, Razão Social, Nome Fantasia, CNPJ, etc.)
+      const lines = clean.split("\n");
+      const filteredLines: string[] = [];
+      let pastHeaders = false;
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        const isHeaderLine =
+          /^(?:[^\w\s]*\s*)?(?:Agendamento\s+T[eé]cnico|T[eé]cnico\s+Respons[aá]vel|Raz[aã]o\s+Social|Nome\s+Fantasia|CNPJ|Endere[cç]o|Contato|Ticket):\s*/i.test(trimmed) ||
+          /^Agendamento\s+T[eé]cnico\s*[–\-]/i.test(trimmed);
+
+        if (!pastHeaders && isHeaderLine) {
+          continue; // skip header line
+        }
+        if (trimmed === "" && !pastHeaders) {
+          continue; // skip leading empty lines
+        }
+        pastHeaders = true;
+        filteredLines.push(line);
+      }
+      clean = filteredLines.join("\n").trim();
+    }
+
+    // 3. Remove trailing timestamp/time at the bottom (e.g. "12:42" or "Editado 12:42")
+    clean = clean.replace(/(?:\r?\n|\s)+(?:\d{1,2}:\d{2}(?::\d{2})?|Editad[ao].*)$/i, "").trim();
+
+    return clean;
   };
 
   // Helper function to parse structured Agendamento Técnico text blocks
@@ -146,43 +232,40 @@ async function startServer() {
       descricaoAtendimento?: string;
     } = {};
 
-    // Nome Fantasia: POSTO COMETA
-    const matchFantasia = text.match(/Nome\s+Fantasia:\s*([^\r\n]+)/i);
+    // Nome Fantasia: POSTO PRIMEIRA CAPITAL
+    const matchFantasia = text.match(/(?:[^\w\s]*\s*)?Nome\s+Fantasia:\s*([^\r\n]+)/i);
     if (matchFantasia && matchFantasia[1].trim()) {
       res.nomeFantasia = matchFantasia[1].trim();
     }
 
-    // Razão Social: POSTO COMETA COMÉRCIO DE PETRÓLEO LTDA
-    const matchRazao = text.match(/Razão\s+Social:\s*([^\r\n]+)/i);
+    // Razão Social: LH COMÉRCIO DE DERIVADOS DE PETRÓLEO LTDA – EPP
+    const matchRazao = text.match(/(?:[^\w\s]*\s*)?Raz[aã]o\s+Social:\s*([^\r\n]+)/i);
     if (matchRazao && matchRazao[1].trim()) {
       res.razaoSocial = matchRazao[1].trim();
     }
 
     // Técnico Responsável: @ACS VISGUEIRA or @Eduardo
-    const matchTecnico = text.match(/Técnico\s+Responsável:\s*@?([^\r\n]+)/i);
+    const matchTecnico = text.match(/(?:[^\w\s]*\s*)?T[eé]cnico\s+Respons[aá]vel:\s*@?([^\r\n]+)/i);
     if (matchTecnico && matchTecnico[1].trim()) {
       res.tecnicoResponsavel = matchTecnico[1].trim().replace(/^@/, '').trim();
     }
 
-    // CNPJ: 04.961.676/0001-00
-    const matchCnpj = text.match(/CNPJ:\s*([\d\.\/\-]+)/i);
+    // CNPJ: 14.780.004/0001-44
+    const matchCnpj = text.match(/(?:[^\w\s]*\s*)?CNPJ:\s*([\d\.\/\-]+)/i);
     if (matchCnpj && matchCnpj[1].trim()) {
       res.cnpj = matchCnpj[1].trim();
     }
 
-    // Ticket: 20260731000057
-    const matchTicket = text.match(/Ticket:\s*(\d+)/i);
+    // Ticket: 20260801000028
+    const matchTicket = text.match(/(?:[^\w\s]*\s*)?Ticket:\s*(\d+)/i);
     if (matchTicket && matchTicket[1].trim()) {
       res.ticketNum = matchTicket[1].trim();
     }
 
     // Descrição do Atendimento:
-    const matchDesc = text.match(/(?:Descrição\s+do\s+Atendimento|Descrição\s+do\s+Chamado|Descrição\s+de\s+Atendimento):\s*([\s\S]+)/i);
-    if (matchDesc && matchDesc[1].trim()) {
-      let descText = matchDesc[1].trim();
-      // Clean trailing edit timestamps if present
-      descText = descText.replace(/Editad[ao]\s+\d{1,2}:\d{2}\s*$/i, '').trim();
-      res.descricaoAtendimento = descText;
+    const extractedOnly = extractOnlyDescription(text);
+    if (extractedOnly && extractedOnly !== text.trim()) {
+      res.descricaoAtendimento = extractedOnly;
     }
 
     return res;
@@ -192,7 +275,7 @@ async function startServer() {
   const parseTicketFields = (t: any) => {
     // 1. Gather all available plain text blocks from actions, subject, customFieldValues
     const rawTexts: string[] = [];
-    if (t.subject) rawTexts.push(t.subject);
+    if (t.subject) rawTexts.push(stripHtml(t.subject));
     if (t.actions && Array.isArray(t.actions)) {
       t.actions.forEach((act: any) => {
         if (act.description) {
@@ -204,7 +287,7 @@ async function startServer() {
       t.customFieldValues.forEach((cf: any) => {
         const val = cf.value || (cf.items && cf.items[0]?.customFieldItem);
         if (typeof val === 'string' && val.trim()) {
-          rawTexts.push(val.trim());
+          rawTexts.push(stripHtml(val));
         }
       });
     }
@@ -230,7 +313,7 @@ async function startServer() {
     const mainClient = t.clients && t.clients.length > 0 ? t.clients[0] : null;
     const createdBy = t.createdBy;
 
-    // Cliente (Prioritize Nome Fantasia from Agendamento Técnico, then Razão Social, then Movidesk client object)
+    // Cliente (Prioritize Nome Fantasia or Razão Social from Agendamento Técnico text, then Movidesk client object)
     const clienteName =
       extractedFantasia ||
       extractedRazao ||
@@ -318,23 +401,29 @@ async function startServer() {
 
     const acompanhado = mainClient?.name !== clienteName ? mainClient?.name || "" : "";
 
-    // Descrição do Chamado & Fato (Fato é deixado em branco na importação para preenchimento manual pelo técnico)
-    let descricaoChamado = extractedDescricao;
-    let fato = "";
-    const subject = t.subject || "";
+    // Descrição do Chamado: Ensure ONLY the text below "Descrição do Atendimento:" is extracted
+    let rawDesc = extractedDescricao;
 
-    if (!descricaoChamado) {
+    if (!rawDesc) {
       if (t.actions && Array.isArray(t.actions) && t.actions.length > 0) {
-        const firstActionDesc = stripHtml(t.actions[0]?.description || "");
-        if (firstActionDesc) {
-          descricaoChamado = firstActionDesc;
+        for (const act of t.actions) {
+          const actDesc = stripHtml(act.description || "");
+          const extractedFromAct = extractOnlyDescription(actDesc);
+          if (extractedFromAct) {
+            rawDesc = extractedFromAct;
+            break;
+          }
         }
       }
     }
 
-    if (!descricaoChamado) {
-      descricaoChamado = subject;
+    if (!rawDesc) {
+      rawDesc = extractOnlyDescription(t.subject || "") || t.subject || "";
     }
+
+    const finalDescricaoChamado = extractOnlyDescription(rawDesc);
+    let fato = "";
+    const subject = t.subject || "";
 
     let mappedStatus = "EM_ANDAMENTO";
     const statusLower = String(t.status || "").toLowerCase();
@@ -357,7 +446,7 @@ async function startServer() {
       id: ticketId,
       protocol: String(t.protocol || ticketId),
       subject: subject,
-      descricaoChamado: descricaoChamado,
+      descricaoChamado: finalDescricaoChamado,
       fato: fato,
       createdDate: t.createdDate || "",
       dateFormatted: formattedDate,

@@ -153,7 +153,7 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
           ticket: data.ticket || ticketNum,
           cliente: data.cliente || ticketItem.cliente,
           cnpj: data.cnpj || ticketItem.cnpj,
-          tecnico: '', // Deixa em branco para o usuário preencher
+          tecnico: data.tecnico || ticketItem.tecnico || '',
           acompanhado: data.acompanhado || ticketItem.acompanhado,
           descricaoChamado: data.descricaoChamado || ticketItem.descricaoChamado || ticketItem.subject,
           fato: '',
@@ -173,7 +173,7 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
       ticket: ticketItem.id || ticketItem.protocol,
       cliente: ticketItem.cliente,
       cnpj: ticketItem.cnpj,
-      tecnico: '', // Deixa em branco para o usuário preencher
+      tecnico: ticketItem.tecnico || '',
       acompanhado: ticketItem.acompanhado,
       descricaoChamado: ticketItem.descricaoChamado || ticketItem.subject,
       fato: '',

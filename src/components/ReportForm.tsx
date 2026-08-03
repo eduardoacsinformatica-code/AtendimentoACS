@@ -287,7 +287,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({
         ticket: ticketNum || data.ticket || prev.ticket,
         cliente: data.cliente || prev.cliente,
         cnpj: data.cnpj ? formatCNPJ(data.cnpj) : prev.cnpj,
-        tecnico: '', // Deixa em branco para o usuário preencher
+        tecnico: data.tecnico || settings.defaultTecnico || prev.tecnico,
         acompanhado: data.acompanhado || prev.acompanhado,
         descricaoChamado: data.descricaoChamado || prev.descricaoChamado,
         fato: data.fato !== undefined ? data.fato : '',
@@ -318,7 +318,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({
       ticket: ticketData.ticket || prev.ticket,
       cliente: ticketData.cliente || prev.cliente,
       cnpj: ticketData.cnpj ? formatCNPJ(ticketData.cnpj) : prev.cnpj,
-      tecnico: '', // Deixa em branco para o usuário preencher
+      tecnico: ticketData.tecnico || settings.defaultTecnico || prev.tecnico,
       acompanhado: ticketData.acompanhado || prev.acompanhado,
       descricaoChamado: ticketData.descricaoChamado || prev.descricaoChamado,
       fato: ticketData.fato !== undefined ? ticketData.fato : '',
