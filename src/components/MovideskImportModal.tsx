@@ -206,7 +206,7 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
         tecnico: '', // Deixa em branco para o usuário preencher
         acompanhado: data.acompanhado || '',
         descricaoChamado: data.descricaoChamado || '',
-        fato: data.fato || '',
+        fato: '', // Força vazio para preenchimento manual pelo técnico
         status: data.status || 'EM_ANDAMENTO',
         data: data.data || '',
       });

@@ -291,7 +291,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({
         tecnico: '', // Deixa em branco para o usuário preencher
         acompanhado: data.acompanhado || prev.acompanhado,
         descricaoChamado: data.descricaoChamado || prev.descricaoChamado,
-        fato: data.fato !== undefined ? data.fato : '',
+        fato: '', // Fato é sempre mantido em branco para preenchimento manual pelo técnico
         status: (data.status as ReportStatus) || prev.status,
         data: data.data || prev.data,
       }));
@@ -322,7 +322,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({
       tecnico: '', // Deixa em branco para o usuário preencher
       acompanhado: ticketData.acompanhado || prev.acompanhado,
       descricaoChamado: ticketData.descricaoChamado || prev.descricaoChamado,
-      fato: ticketData.fato !== undefined ? ticketData.fato : '',
+      fato: '', // Fato é sempre mantido em branco para preenchimento manual pelo técnico
       status: (ticketData.status as ReportStatus) || prev.status,
       data: ticketData.data || prev.data,
     }));
