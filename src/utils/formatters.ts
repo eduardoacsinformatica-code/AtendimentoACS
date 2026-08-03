@@ -99,10 +99,6 @@ export function buildWhatsAppMessage(data: ReportData, settings?: TechSettings):
   if (data.acompanhado) msg += `👥 *Acompanhado por:* ${data.acompanhado}\n`;
   msg += `📅 *Data do Atendimento:* ${dataFormatada}\n`;
   msg += `📍 *Modalidade:* ${tipoLabel}\n`;
-  if (data.tipoAutomacao || data.modeloAutomacao) {
-    const automacaoStr = [data.tipoAutomacao, data.modeloAutomacao].filter(Boolean).join(' - ');
-    msg += `🤖 *Automação:* ${automacaoStr}\n`;
-  }
   msg += `${statusInfo.icon} *Status:* ${statusInfo.label}\n\n`;
 
   if (data.descricaoChamado) {

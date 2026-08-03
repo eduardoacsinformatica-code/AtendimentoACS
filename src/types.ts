@@ -20,8 +20,6 @@ export interface ReportData {
   data: string; // YYYY-MM-DD
   status: ReportStatus;
   tipoAtendimento: ServiceType;
-  tipoAutomacao?: string; // 'Com Fio' | 'Sem Fio'
-  modeloAutomacao?: string; // 'CBC05' | 'CBC06' | 'Horustech' | 'Concept' | 'Hiro' | 'Eztech Vision' | 'Eztech Firecourt Plus' | etc.
   descricaoChamado?: string;
   fato: string;
   diagnostico: string;

@@ -68,8 +68,6 @@ export default function App() {
     data: getTodayInputDate(),
     status: 'CONCLUIDO',
     tipoAtendimento: 'PRESENCIAL',
-    tipoAutomacao: '',
-    modeloAutomacao: '',
     descricaoChamado: '',
     fato: '',
     diagnostico: '',

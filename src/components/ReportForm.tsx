@@ -31,8 +31,7 @@ import {
   UploadCloud,
   Send,
   MessageSquare,
-  Lock,
-  Cpu
+  Lock
 } from 'lucide-react';
 
 interface ReportFormProps {
@@ -291,7 +290,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({
         tecnico: '', // Deixa em branco para o usuário preencher
         acompanhado: data.acompanhado || prev.acompanhado,
         descricaoChamado: data.descricaoChamado || prev.descricaoChamado,
-        fato: '', // Fato é sempre mantido em branco para preenchimento manual pelo técnico
+        fato: data.fato !== undefined ? data.fato : '',
         status: (data.status as ReportStatus) || prev.status,
         data: data.data || prev.data,
       }));
@@ -322,7 +321,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({
       tecnico: '', // Deixa em branco para o usuário preencher
       acompanhado: ticketData.acompanhado || prev.acompanhado,
       descricaoChamado: ticketData.descricaoChamado || prev.descricaoChamado,
-      fato: '', // Fato é sempre mantido em branco para preenchimento manual pelo técnico
+      fato: ticketData.fato !== undefined ? ticketData.fato : '',
       status: (ticketData.status as ReportStatus) || prev.status,
       data: ticketData.data || prev.data,
     }));
@@ -786,93 +785,6 @@ export const ReportForm: React.FC<ReportFormProps> = ({
           <span>{aiErrorMessage}</span>
         </div>
       )}
-
-      {/* Tipo e Modelo da Automação */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-3">
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-bold text-slate-200 uppercase tracking-wide flex items-center">
-            <Cpu className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
-            Automação (Tipo e Modelo):
-          </label>
-          {(formData.tipoAutomacao || formData.modeloAutomacao) && (
-            <button
-              type="button"
-              onClick={() => {
-                handleChange('tipoAutomacao', '');
-                handleChange('modeloAutomacao', '');
-              }}
-              className="text-[10px] text-slate-400 hover:text-slate-200 underline transition-colors"
-            >
-              Limpar Seleção
-            </button>
-          )}
-        </div>
-
-        {/* Tipo de Automação (Com Fio / Sem Fio) */}
-        <div>
-          <span className="block text-[11px] font-semibold text-slate-400 mb-1.5">
-            Tipo de Conexão:
-          </span>
-          <div className="flex items-center space-x-2">
-            {['Com Fio', 'Sem Fio'].map((tipo) => {
-              const isSelected = formData.tipoAutomacao === tipo;
-              return (
-                <button
-                  key={tipo}
-                  type="button"
-                  onClick={() =>
-                    handleChange('tipoAutomacao', isSelected ? '' : tipo)
-                  }
-                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition-all flex items-center justify-center space-x-1.5 ${
-                    isSelected
-                      ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 font-semibold shadow-sm'
-                      : 'bg-slate-950 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'
-                  }`}
-                >
-                  <span>{tipo === 'Com Fio' ? '🔌' : '📡'}</span>
-                  <span>{tipo}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Botões dos Modelos de Automação */}
-        <div>
-          <span className="block text-[11px] font-semibold text-slate-400 mb-1.5">
-            Modelo da Automação:
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              'CBC05',
-              'CBC06',
-              'Horustech',
-              'Concept',
-              'Hiro',
-              'Eztech Vision',
-              'Eztech Firecourt Plus',
-            ].map((model) => {
-              const isSelected = formData.modeloAutomacao === model;
-              return (
-                <button
-                  key={model}
-                  type="button"
-                  onClick={() =>
-                    handleChange('modeloAutomacao', isSelected ? '' : model)
-                  }
-                  className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all ${
-                    isSelected
-                      ? 'bg-emerald-950/90 border-emerald-500 text-emerald-300 font-semibold shadow-sm'
-                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-slate-100 hover:border-slate-700'
-                  }`}
-                >
-                  {model}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
 
       {/* Textarea 0: DESCRIÇÃO DO CHAMADO / ATENDIMENTO */}
       <div className="space-y-1.5">

@@ -190,16 +190,6 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
                 <span className="text-[10px] uppercase font-bold text-slate-500 block">Modalidade</span>
                 <span className="text-slate-800">{tipoLabel}</span>
               </div>
-              {(formData.tipoAutomacao || formData.modeloAutomacao) && (
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-500 block">Automação</span>
-                  <span className="font-semibold text-slate-900">
-                    {formData.tipoAutomacao ? `${formData.tipoAutomacao}` : ''}
-                    {formData.tipoAutomacao && formData.modeloAutomacao ? ' - ' : ''}
-                    {formData.modeloAutomacao ? `${formData.modeloAutomacao}` : ''}
-                  </span>
-                </div>
-              )}
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-500 block">Status</span>
                 <span className="font-bold text-slate-900 flex items-center">
