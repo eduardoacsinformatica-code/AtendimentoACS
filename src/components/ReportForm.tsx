@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { ReportData, ReportStatus, ServiceType, TechSettings } from '../types';
 import { formatCNPJ, getTodayInputDate, generateAutoTicketNumber } from '../utils/formatters';
+import { fetchDirectMovideskTicket } from '../utils/movideskParser';
 import { DEFAULT_TECNICOS } from '../data/tecnicos';
 import { WhatsAppShareModal } from './WhatsAppShareModal';
 import { MovideskImportModal } from './MovideskImportModal';
@@ -273,15 +274,25 @@ export const ReportForm: React.FC<ReportFormProps> = ({
 
     try {
       const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
-      const res = await fetch(`/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}&token=${encodeURIComponent(token)}`);
-      
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Chamado #${ticketNum} não foi encontrado no Movidesk.`);
+      let data: any = null;
+
+      try {
+        const res = await fetch(`/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}&token=${encodeURIComponent(token)}`);
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch {
+        // Proxy failed
       }
 
-      const data = await res.json();
-      
+      if (!data) {
+        data = await fetchDirectMovideskTicket(ticketNum, token);
+      }
+
+      if (!data) {
+        throw new Error(`Chamado #${ticketNum} não foi encontrado no Movidesk.`);
+      }
+
       setFormData((prev) => ({
         ...prev,
         ticket: ticketNum || data.ticket || prev.ticket,
@@ -299,7 +310,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({
 
       setMovideskMessage({
         type: 'success',
-        text: `Chamado #${data.ticket} importado com sucesso! Cliente: ${data.cliente || 'OK'}`,
+        text: `Chamado #${data.ticket || ticketNum} importado com sucesso! Cliente: ${data.cliente || 'OK'}`,
       });
       setTimeout(() => setMovideskMessage(null), 7000);
     } catch (err: any) {

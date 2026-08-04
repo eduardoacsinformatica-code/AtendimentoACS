@@ -10,6 +10,17 @@ async function startServer() {
 
   app.use(express.json());
 
+  // CORS middleware for API endpoints
+  app.use("/api", (req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") {
+      return res.status(200).end();
+    }
+    next();
+  });
+
   // API Route: CNPJ Proxy Lookup
   app.get("/api/cnpj/:cnpj", async (req, res) => {
     try {

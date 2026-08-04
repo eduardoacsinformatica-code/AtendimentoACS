@@ -17,6 +17,11 @@ import {
 } from 'lucide-react';
 import { TechSettings, ReportData } from '../types';
 import { formatDateToPtBr } from '../utils/formatters';
+import {
+  fetchDirectMovideskAgents,
+  fetchDirectMovideskTickets,
+  fetchDirectMovideskTicket,
+} from '../utils/movideskParser';
 
 interface MovideskAgent {
   id: string;
@@ -86,14 +91,21 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
     setAgentsError(null);
     try {
       const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
-      const res = await fetch(`/api/movidesk/agents?token=${encodeURIComponent(token)}`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Erro ao carregar lista de atendentes.');
+      try {
+        const res = await fetch(`/api/movidesk/agents?token=${encodeURIComponent(token)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.agents && Array.isArray(data.agents)) {
+            setAgents(data.agents);
+            return;
+          }
+        }
+      } catch {
+        // Fallback to direct client-side fetch
       }
 
-      setAgents(data.agents || []);
+      const directAgents = await fetchDirectMovideskAgents(token);
+      setAgents(directAgents);
     } catch (err) {
       setAgentsError(err instanceof Error ? err.message : 'Erro ao conectar ao Movidesk.');
     } finally {
@@ -112,28 +124,35 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
     setTicketsError(null);
     try {
       const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
-      let url = `/api/movidesk/tickets?token=${encodeURIComponent(token)}`;
-
-      if (agent) {
-        if (agent.id && agent.id !== 'all') {
-          url += `&agentId=${encodeURIComponent(agent.id)}`;
+      try {
+        let url = `/api/movidesk/tickets?token=${encodeURIComponent(token)}`;
+        if (agent) {
+          if (agent.id && agent.id !== 'all') {
+            url += `&agentId=${encodeURIComponent(agent.id)}`;
+          }
+          url += `&agentName=${encodeURIComponent(agent.name)}`;
         }
-        url += `&agentName=${encodeURIComponent(agent.name)}`;
+
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.tickets && Array.isArray(data.tickets)) {
+            setTickets(data.tickets);
+            setDateRangeInfo('Todos os chamados (sem limite de data)');
+            return;
+          }
+        }
+      } catch {
+        // Fallback to direct fetch
       }
 
-      const res = await fetch(url);
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Erro ao carregar chamados.');
-      }
-
-      setTickets(data.tickets || []);
-      if (data.startDate && data.endDate) {
-        setDateRangeInfo(`${formatDateToPtBr(data.startDate)} até ${formatDateToPtBr(data.endDate)}`);
-      } else {
-        setDateRangeInfo('Todos os chamados (sem limite de data)');
-      }
+      const directTickets = await fetchDirectMovideskTickets(
+        token,
+        agent?.id,
+        agent?.name
+      );
+      setTickets(directTickets as any);
+      setDateRangeInfo('Todos os chamados (sem limite de data)');
     } catch (err) {
       setTicketsError(err instanceof Error ? err.message : 'Erro ao consultar chamados.');
     } finally {
@@ -146,9 +165,26 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
     try {
       const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
       const ticketNum = ticketItem.id || ticketItem.protocol;
-      const res = await fetch(`/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}&token=${encodeURIComponent(token)}`);
-      if (res.ok) {
-        const data = await res.json();
+      let data: any = null;
+
+      try {
+        const res = await fetch(`/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}&token=${encodeURIComponent(token)}`);
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch {
+        // Proxy failed
+      }
+
+      if (!data) {
+        try {
+          data = await fetchDirectMovideskTicket(ticketNum, token);
+        } catch {
+          // Direct fetch failed
+        }
+      }
+
+      if (data) {
         onSelectTicket({
           ticket: data.ticket || ticketNum,
           cliente: data.cliente || ticketItem.cliente,
@@ -163,8 +199,6 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
         onClose();
         return;
       }
-    } catch {
-      // Fall back to ticketItem if single fetch fails
     } finally {
       setLoadingTickets(false);
     }
@@ -192,18 +226,31 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
 
     try {
       const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
-      const res = await fetch(`/api/movidesk/ticket?id=${encodeURIComponent(directTicketId.trim())}&token=${encodeURIComponent(token)}`);
-      const data = await res.json();
+      const ticketNum = directTicketId.trim();
+      let data: any = null;
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Chamado não encontrado.');
+      try {
+        const res = await fetch(`/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}&token=${encodeURIComponent(token)}`);
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch {
+        // Proxy call failed
+      }
+
+      if (!data) {
+        data = await fetchDirectMovideskTicket(ticketNum, token);
+      }
+
+      if (!data || (!data.ticket && !data.cliente)) {
+        throw new Error('Chamado não encontrado.');
       }
 
       onSelectTicket({
-        ticket: data.ticket || directTicketId.trim(),
+        ticket: data.ticket || ticketNum,
         cliente: data.cliente || '',
         cnpj: data.cnpj || '',
-        tecnico: '', // Deixa em branco para o usuário preencher
+        tecnico: data.tecnico || '',
         acompanhado: data.acompanhado || '',
         descricaoChamado: data.descricaoChamado || '',
         fato: data.fato || '',
