@@ -132,7 +132,7 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
       if (data.startDate && data.endDate) {
         setDateRangeInfo(`${formatDateToPtBr(data.startDate)} até ${formatDateToPtBr(data.endDate)}`);
       } else {
-        setDateRangeInfo('Últimos 7 dias e hoje');
+        setDateRangeInfo('Todos os chamados (sem limite de data)');
       }
     } catch (err) {
       setTicketsError(err instanceof Error ? err.message : 'Erro ao consultar chamados.');

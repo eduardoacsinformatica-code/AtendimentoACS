@@ -10,13 +10,9 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: "Chave de API do Movidesk não informada." });
     }
 
-    const now = new Date();
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
-
     const movideskUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
       token
-    )}&$select=id,protocol,subject,createdDate,status,owner,createdBy&$expand=clients,owner,createdBy,actions,customFieldValues&$orderby=createdDate desc&$top=120`;
+    )}&$select=id,protocol,subject,createdDate,status,owner,createdBy&$expand=clients,owner,createdBy,actions,customFieldValues&$orderby=createdDate desc&$top=200`;
 
     const response = await fetch(movideskUrl);
 
@@ -30,11 +26,6 @@ export default async function handler(req: any, res: any) {
     const ticketList: any[] = Array.isArray(rawData) ? rawData : [];
 
     const filtered = ticketList.filter((t: any) => {
-      const tDate = t.createdDate ? new Date(t.createdDate) : null;
-      if (tDate && tDate < sevenDaysAgo) {
-        return false;
-      }
-
       if (!agentId && !agentName) {
         return true;
       }
@@ -67,8 +58,7 @@ export default async function handler(req: any, res: any) {
 
     return res.status(200).json({
       tickets: parsedTickets,
-      startDate: sevenDaysAgo.toISOString().split("T")[0],
-      endDate: now.toISOString().split("T")[0],
+      allDates: true,
     });
   } catch (error) {
     console.error("Erro na rota Movidesk Tickets:", error);

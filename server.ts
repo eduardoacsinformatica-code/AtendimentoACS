@@ -118,7 +118,7 @@ async function startServer() {
     }
   });
 
-  // API Route: Movidesk Tickets by Agent & Date (Today + last 7 days)
+  // API Route: Movidesk Tickets by Agent
   app.get("/api/movidesk/tickets", async (req, res) => {
     try {
       const token = (req.query.token as string) || process.env.MOVIDESK_API_TOKEN || "75762c40-5399-4b83-b958-c265fbf5d6fb";
@@ -129,15 +129,10 @@ async function startServer() {
         return res.status(400).json({ error: "Chave de API do Movidesk não informada." });
       }
 
-      // Calculate date filter: 7 days ago from today (00:00:00)
-      const now = new Date();
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      sevenDaysAgo.setHours(0, 0, 0, 0);
-
-      // Fetch top recent tickets from Movidesk (up to 120 recent tickets)
+      // Fetch tickets from Movidesk ordered by creation date
       const movideskUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
         token
-      )}&$select=id,protocol,subject,createdDate,status,owner,createdBy&$expand=clients,owner,createdBy,actions,customFieldValues&$orderby=createdDate desc&$top=120`;
+      )}&$select=id,protocol,subject,createdDate,status,owner,createdBy&$expand=clients,owner,createdBy,actions,customFieldValues&$orderby=createdDate desc&$top=200`;
 
       const response = await fetch(movideskUrl);
 
@@ -150,16 +145,9 @@ async function startServer() {
       const rawData = await response.json();
       const ticketList: any[] = Array.isArray(rawData) ? rawData : [];
 
-      // Filter and map tickets
+      // Filter by agent if specified, otherwise return all tickets
       const filtered = ticketList.filter((t: any) => {
-        // Date check: created within last 7 days + today
-        const tDate = t.createdDate ? new Date(t.createdDate) : null;
-        if (tDate && tDate < sevenDaysAgo) {
-          return false;
-        }
-
-        // Agent / User check
-        if (agentId) {
+        if (agentId && agentId !== "all") {
           const isOwner = t.owner?.id && String(t.owner.id) === agentId;
           const isCreatedBy = t.createdBy?.id && String(t.createdBy.id) === agentId;
           if (!isOwner && !isCreatedBy) return false;
@@ -177,8 +165,7 @@ async function startServer() {
       return res.json({
         tickets: formattedTickets,
         count: formattedTickets.length,
-        startDate: sevenDaysAgo.toISOString().split("T")[0],
-        endDate: now.toISOString().split("T")[0],
+        allDates: true,
       });
     } catch (error) {
       console.error("Erro na busca de chamados por atendente:", error);
