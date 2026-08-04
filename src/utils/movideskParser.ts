@@ -1,3 +1,5 @@
+import { ReportData } from '../types';
+
 export const decodeHtmlEntities = (str: string): string => {
   if (!str) return "";
   return str
@@ -345,29 +347,30 @@ export const parseTicketFields = (t: any) => {
 
 export async function fetchDirectMovideskTicket(ticketId: string, token: string) {
   const cleanId = String(ticketId).trim();
-  const numVal = Number(cleanId);
-  const isSmallInt = !isNaN(numVal) && numVal > 0 && numVal <= 2147483647 && cleanId.length < 9;
-
   let ticket: any = null;
 
-  if (isSmallInt) {
-    try {
-      const movideskUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-        token
-      )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
+  // 1. Direct ID query first
+  try {
+    const movideskUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+      token
+    )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
 
-      const response = await fetch(movideskUrl);
-      if (response.ok) {
-        const data = await response.json();
-        ticket = Array.isArray(data) ? data[0] : data;
+    const response = await fetch(movideskUrl);
+    if (response.ok) {
+      const data = await response.json();
+      const candidate = Array.isArray(data) ? data[0] : data;
+      if (candidate && (candidate.id || candidate.protocol)) {
+        ticket = candidate;
       }
-    } catch {
-      // ignore
     }
+  } catch {
+    // ignore
   }
 
+  // 2. Filter fallback
   if (!ticket || (!ticket.id && !ticket.protocol)) {
-    const filterExpr = isSmallInt
+    const isNum = !isNaN(Number(cleanId));
+    const filterExpr = isNum
       ? `protocol eq '${cleanId}' or id eq ${cleanId}`
       : `protocol eq '${cleanId}'`;
 
@@ -475,3 +478,195 @@ export async function fetchDirectMovideskTickets(token: string, agentId?: string
 
   return filtered.map((t: any) => parseTicketFields(t));
 }
+
+export async function exportReportToMovidesk(formData: ReportData, token: string) {
+  if (!formData.ticket) {
+    throw new Error('Informe o número do chamado antes de exportar.');
+  }
+
+  // 1. Try server backend route first (/api/movidesk/export)
+  try {
+    const response = await fetch('/api/movidesk/export', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ...formData,
+        token,
+      }),
+    });
+
+    const json = await response.json().catch(() => null);
+
+    if (response.ok && json && json.success) {
+      return json.message || `Laudo enviado com sucesso para o chamado #${formData.ticket}!`;
+    }
+
+    if (json && json.error && !json.error.includes('Failed to fetch')) {
+      throw new Error(json.error);
+    }
+  } catch (err: any) {
+    if (err?.message && !err.message.includes('Failed to fetch') && !err.message.includes('404')) {
+      throw err;
+    }
+  }
+
+  // 2. Client-side Direct Fallback
+  const cleanId = String(formData.ticket).trim();
+  let targetNumericId: number | null = null;
+
+  // Try direct ID lookup first
+  try {
+    const directUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+      token
+    )}&id=${encodeURIComponent(cleanId)}`;
+
+    const directRes = await fetch(directUrl);
+    if (directRes.ok) {
+      const directData = await directRes.json();
+      const candidate = Array.isArray(directData) ? directData[0] : directData;
+      if (candidate && candidate.id) {
+        targetNumericId = candidate.id;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  if (!targetNumericId) {
+    const isNum = !isNaN(Number(cleanId));
+    const filterExpr = isNum ? `protocol eq '${cleanId}' or id eq ${cleanId}` : `protocol eq '${cleanId}'`;
+    const filterUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+      token
+    )}&$filter=${encodeURIComponent(filterExpr)}`;
+
+    const filterRes = await fetch(filterUrl);
+    if (filterRes.ok) {
+      const filterData = await filterRes.json();
+      if (Array.isArray(filterData) && filterData.length > 0 && filterData[0].id) {
+        targetNumericId = filterData[0].id;
+      }
+    }
+  }
+
+  if (!targetNumericId) {
+    throw new Error(`Chamado #${cleanId} não foi encontrado no Movidesk.`);
+  }
+
+  const photosList = Array.isArray(formData.fotos) ? formData.fotos : [];
+  const htmlAction = `
+    <div style="font-family: Arial, sans-serif; font-size: 14px; color: #1e293b; line-height: 1.6; border: 1px solid #cbd5e0; border-radius: 8px; padding: 16px; background-color: #f8fafc; max-width: 700px;">
+      <div style="background-color: #0f172a; color: #ffffff; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px;">
+        <h3 style="margin: 0; font-size: 15px; font-weight: bold; color: #38bdf8;">
+          📋 LAUDO DE ATENDIMENTO TÉCNICO DE CAMPO
+        </h3>
+        ${formData.tecnico ? `<span style="font-size: 12px; color: #94a3b8;">Técnico Responsável: ${formData.tecnico}</span>` : ''}
+      </div>
+
+      <p style="margin-bottom: 12px;">
+        <strong>👤 Responsável no Cliente (Acompanhante):</strong><br/>
+        <span style="color: #0f172a; font-size: 14px; font-weight: 600;">${formData.acompanhado || 'Não informado'}</span>
+      </p>
+
+      <div style="margin-bottom: 14px;">
+        <strong>🛠️ Diagnóstico e Ações Realizadas:</strong>
+        <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0; margin-top: 4px; white-space: pre-wrap; font-size: 13px;">${formData.diagnostico || 'Nenhuma ação registrada'}</div>
+      </div>
+
+      ${formData.observacoes ? `
+      <div style="margin-bottom: 14px;">
+        <strong>📝 Observações e Recomendações:</strong>
+        <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0; margin-top: 4px; white-space: pre-wrap; font-size: 13px;">${formData.observacoes}</div>
+      </div>
+      ` : ''}
+
+      ${photosList.length > 0 ? `
+      <div style="margin-bottom: 14px;">
+        <strong>📷 Fotos e Evidências (${photosList.length}):</strong>
+        <div style="margin-top: 8px;">
+          ${photosList.map((foto, idx) => `
+            <div style="margin-bottom: 10px;">
+              <p style="font-size: 11px; color: #64748b; margin: 0 0 2px 0;">Evidência #${idx + 1}:</p>
+              <img src="${foto}" alt="Evidência ${idx + 1}" style="max-width: 100%; max-height: 350px; border-radius: 6px; border: 1px solid #cbd5e0;" />
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      ` : '<p style="margin-bottom: 14px; font-size: 13px;"><strong>📷 Fotos e Evidências:</strong> Nenhuma foto anexada.</p>'}
+
+      <div style="margin-top: 16px; padding-top: 12px; border-top: 2px dashed #cbd5e0;">
+        <strong>✍️ Assinatura Digital do Cliente:</strong>
+        ${formData.assinaturaCliente ? `
+          <p style="font-size: 12px; color: #475569; margin: 4px 0 8px 0;">Coletada digitalmente no local por <strong>${formData.acompanhado || formData.cliente || 'Cliente'}</strong></p>
+          <div style="background: #ffffff; padding: 8px; display: inline-block; border-radius: 6px; border: 1px solid #cbd5e0;">
+            <img src="${formData.assinaturaCliente}" alt="Assinatura do Cliente" style="max-width: 320px; max-height: 120px; display: block;" />
+          </div>
+        ` : '<span style="color: #64748b; font-style: italic;"> (Não coletada)</span>'}
+      </div>
+    </div>
+  `;
+
+  const patchBody: any = {
+    id: targetNumericId,
+    actions: [
+      {
+        actionType: 'Public',
+        description: htmlAction,
+        origin: 2,
+      },
+    ],
+  };
+
+  if (formData.status) {
+    const statusMap: Record<string, string> = {
+      'CONCLUIDO': 'Concluído',
+      'EM_ANDAMENTO': 'Em atendimento',
+      'PENDENTE': 'Pendente',
+      'AGUARDANDO_CLIENTE': 'Aguardando cliente',
+      'AGUARDANDO_PECA': 'Aguardando peça',
+    };
+    if (statusMap[formData.status]) {
+      patchBody.status = statusMap[formData.status];
+      patchBody.justification = "Atendimento de campo e laudo técnico registrado";
+      patchBody.justificationReason = "Atendimento de campo e laudo técnico registrado";
+    }
+  }
+
+  const updateUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(token)}&id=${targetNumericId}`;
+  let updateRes = await fetch(updateUrl, {
+    method: 'PATCH',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(patchBody),
+  });
+
+  if (!updateRes.ok) {
+    const errText = await updateRes.text().catch(() => '');
+
+    if (patchBody.status && (errText.includes("Status") || errText.includes("Reason") || errText.includes("justification"))) {
+      delete patchBody.status;
+      delete patchBody.justification;
+      delete patchBody.justificationReason;
+
+      updateRes = await fetch(updateUrl, {
+        method: 'PATCH',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(patchBody),
+      });
+    }
+
+    if (!updateRes.ok) {
+      const finalErr = await updateRes.text().catch(() => errText);
+      throw new Error(`Falha ao atualizar no Movidesk (Status ${updateRes.status}): ${finalErr}`);
+    }
+  }
+
+  return `Laudo enviado com sucesso para o Chamado #${cleanId} no Movidesk!`;
+}
+

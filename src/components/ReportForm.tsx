@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { ReportData, ReportStatus, ServiceType, TechSettings } from '../types';
 import { formatCNPJ, getTodayInputDate, generateAutoTicketNumber } from '../utils/formatters';
-import { fetchDirectMovideskTicket } from '../utils/movideskParser';
+import { fetchDirectMovideskTicket, exportReportToMovidesk } from '../utils/movideskParser';
 import { DEFAULT_TECNICOS } from '../data/tecnicos';
 import { WhatsAppShareModal } from './WhatsAppShareModal';
 import { MovideskImportModal } from './MovideskImportModal';
@@ -72,6 +72,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({
   // Movidesk Integration State
   const [isMovideskModalOpen, setIsMovideskModalOpen] = useState(false);
   const [isImportingMovidesk, setIsImportingMovidesk] = useState(false);
+  const [isExportingMovidesk, setIsExportingMovidesk] = useState(false);
   const [isTicketImported, setIsTicketImported] = useState(false);
   const [movideskMessage, setMovideskMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -353,6 +354,36 @@ export const ReportForm: React.FC<ReportFormProps> = ({
     setTimeout(() => setMovideskMessage(null), 5000);
   };
 
+  // Export filled report back to Movidesk ticket
+  const handleExportToMovidesk = async () => {
+    if (!formData.ticket || !formData.ticket.trim()) {
+      setMovideskMessage({
+        type: 'error',
+        text: 'Informe o número do Ticket/Chamado antes de enviar para o Movidesk.',
+      });
+      return;
+    }
+
+    setIsExportingMovidesk(true);
+    setMovideskMessage(null);
+
+    try {
+      const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
+      const msg = await exportReportToMovidesk(formData, token);
+      setMovideskMessage({
+        type: 'success',
+        text: msg,
+      });
+    } catch (err: any) {
+      setMovideskMessage({
+        type: 'error',
+        text: err.message || 'Erro ao enviar dados do laudo para o Movidesk.',
+      });
+    } finally {
+      setIsExportingMovidesk(false);
+    }
+  };
+
   // Quick Date Helpers
   const handleSetToday = () => {
     handleChange('data', getTodayInputDate());
@@ -524,9 +555,9 @@ export const ReportForm: React.FC<ReportFormProps> = ({
             <button
               type="button"
               onClick={handleImportMovideskDirect}
-              disabled={isImportingMovidesk}
-              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-slate-950 font-bold text-xs rounded-xl transition-all flex items-center shrink-0 shadow-md shadow-emerald-950/40"
-              title="Importar dados do chamado diretamente do Movidesk"
+              disabled={isImportingMovidesk || isExportingMovidesk}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-slate-950 font-bold text-xs rounded-xl transition-all flex items-center shrink-0 shadow-md shadow-emerald-950/40"
+              title="Importar dados do chamado do Movidesk"
             >
               {isImportingMovidesk ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -539,16 +570,27 @@ export const ReportForm: React.FC<ReportFormProps> = ({
             </button>
           </div>
           {movideskMessage && (
-            <p className={`text-[11px] mt-1 flex items-center ${
-              movideskMessage.type === 'success' ? 'text-emerald-400' : 'text-rose-400'
+            <div className={`mt-2 p-2.5 rounded-xl text-xs flex items-center justify-between border ${
+              movideskMessage.type === 'success'
+                ? 'bg-emerald-950/60 border-emerald-800/80 text-emerald-300'
+                : 'bg-rose-950/60 border-rose-800/80 text-rose-300'
             }`}>
-              {movideskMessage.type === 'success' ? (
-                <Check className="w-3 h-3 mr-1 shrink-0" />
-              ) : (
-                <AlertCircle className="w-3 h-3 mr-1 shrink-0" />
-              )}
-              {movideskMessage.text}
-            </p>
+              <div className="flex items-center space-x-1.5">
+                {movideskMessage.type === 'success' ? (
+                  <Check className="w-3.5 h-3.5 shrink-0 text-emerald-400 stroke-[2.5]" />
+                ) : (
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                )}
+                <span className="leading-tight">{movideskMessage.text}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMovideskMessage(null)}
+                className="text-slate-400 hover:text-white ml-2"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
         </div>
 
@@ -1158,6 +1200,26 @@ export const ReportForm: React.FC<ReportFormProps> = ({
             <>
               <Save className="w-4 h-4 mr-1.5 text-slate-400" />
               Salvar no Histórico
+            </>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleExportToMovidesk}
+          disabled={isExportingMovidesk || isImportingMovidesk}
+          className="w-full sm:w-auto px-5 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center shadow-lg shadow-sky-950/40 border border-sky-400/30"
+          title="Enviar Acompanhante, Diagnóstico, Fotos e Assinatura ao Movidesk"
+        >
+          {isExportingMovidesk ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin text-white" />
+              Enviando ao Movidesk...
+            </>
+          ) : (
+            <>
+              <UploadCloud className="w-4 h-4 mr-2 text-sky-200" />
+              Enviar p/ Movidesk
             </>
           )}
         </button>
