@@ -1,5 +1,7 @@
 import { ReportData } from "../../src/types";
 
+import { validateMovideskPayload, getMovideskTechnicianCredentials } from "../../src/utils/movideskParser";
+
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -34,12 +36,19 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: "Número do Ticket/Chamado é obrigatório para exportação." });
     }
 
+    const creds = (body as any).movideskCredentials || getMovideskTechnicianCredentials(tecnico);
+
     const cleanId = String(ticket).trim();
-    const headers = {
+    const headers: Record<string, string> = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
       "Accept": "application/json",
       "Content-Type": "application/json",
     };
+
+    if (creds) {
+      headers["X-Movidesk-Login"] = creds.login;
+      headers["X-Movidesk-Password"] = creds.senha;
+    }
 
     let targetNumericId: number | null = null;
 
@@ -136,18 +145,28 @@ export default async function handler(req: any, res: any) {
       </div>
     `;
 
-    // Movidesk PATCH body
-    const patchBody: any = {
-      id: targetNumericId,
-      actions: [
-        {
-          actionType: "Public",
-          description: htmlAction,
-          origin: 2,
-        },
-      ],
+    const actionObj: any = {
+      type: 1,
+      actionType: "Public",
+      description: htmlAction,
+      origin: 2,
     };
 
+    if (creds) {
+      actionObj.createdBy = {
+        id: creds.login,
+        personType: 1,
+        profileType: 1,
+      };
+    }
+
+    // Movidesk PATCH body
+    let patchBody: any = {
+      id: targetNumericId,
+      actions: [actionObj],
+    };
+
+    let statusAttempted = false;
     if (status) {
       const statusMap: Record<string, string> = {
         'CONCLUIDO': 'Concluído',
@@ -158,10 +177,11 @@ export default async function handler(req: any, res: any) {
       };
       if (statusMap[status]) {
         patchBody.status = statusMap[status];
-        patchBody.justification = "Atendimento de campo e laudo técnico registrado";
-        patchBody.justificationReason = "Atendimento de campo e laudo técnico registrado";
+        statusAttempted = true;
       }
     }
+
+    patchBody = validateMovideskPayload(patchBody);
 
     const updateUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(token)}&id=${targetNumericId}`;
     let updateRes = await fetch(updateUrl, {
@@ -170,34 +190,36 @@ export default async function handler(req: any, res: any) {
       body: JSON.stringify(patchBody),
     });
 
+    let statusUpdated = statusAttempted;
+
+    // If PATCH failed and we tried updating status, retry without status to guarantee Laudo action is added
+    if (!updateRes.ok && patchBody.status) {
+      delete patchBody.status;
+      statusUpdated = false;
+
+      const fallbackBody = validateMovideskPayload(patchBody);
+      updateRes = await fetch(updateUrl, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(fallbackBody),
+      });
+    }
+
     if (!updateRes.ok) {
-      const errText = await updateRes.text().catch(() => "");
-
-      if (patchBody.status && (errText.includes("Status") || errText.includes("Reason") || errText.includes("justification"))) {
-        delete patchBody.status;
-        delete patchBody.justification;
-        delete patchBody.justificationReason;
-
-        updateRes = await fetch(updateUrl, {
-          method: "PATCH",
-          headers,
-          body: JSON.stringify(patchBody),
-        });
-      }
-
-      if (!updateRes.ok) {
-        const finalErr = await updateRes.text().catch(() => errText);
-        console.error("Erro no PATCH Movidesk:", updateRes.status, finalErr);
-        return res.status(updateRes.status).json({
-          error: `Movidesk respondeu com status ${updateRes.status}: ${finalErr || 'Falha ao atualizar chamado no Movidesk.'}`,
-        });
-      }
+      const finalErr = await updateRes.text().catch(() => "");
+      console.error("Erro no PATCH Movidesk:", updateRes.status, finalErr);
+      return res.status(200).json({
+        success: false,
+        error: `Movidesk respondeu com status ${updateRes.status}: ${finalErr || 'Falha ao atualizar chamado no Movidesk.'}`,
+      });
     }
 
     return res.status(200).json({
       success: true,
       ticket: cleanId,
-      message: `Laudo e dados enviados com sucesso para o Chamado #${cleanId} no Movidesk!`,
+      message: statusUpdated
+        ? `Laudo e dados enviados com sucesso para o Chamado #${cleanId} no Movidesk!`
+        : `Laudo e evidências incluídos com sucesso no Chamado #${cleanId}!`,
     });
   } catch (error) {
     console.error("Erro ao exportar laudo para o Movidesk:", error);

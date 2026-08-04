@@ -479,10 +479,78 @@ export async function fetchDirectMovideskTickets(token: string, agentId?: string
   return filtered.map((t: any) => parseTicketFields(t));
 }
 
+/**
+ * Valida e sanitiza o payload do Movidesk antes do envio, garantindo que
+ * o array 'actions' contenha apenas objetos com a propriedade 'type' igual a 1 ou 2.
+ * Converte qualquer valor inválido ou ausente para o padrão correto.
+ */
+export function validateMovideskPayload<T extends Record<string, any>>(payload: T): T {
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
+
+  const validated: any = { ...payload };
+
+  if (Array.isArray(validated.actions)) {
+    validated.actions = validated.actions.map((action: any) => {
+      if (!action || typeof action !== 'object') {
+        return { type: 1, actionType: 'Public' };
+      }
+
+      let typeVal = action.type;
+      if (typeVal !== 1 && typeVal !== 2) {
+        if (typeVal === "1" || typeVal === "2") {
+          typeVal = Number(typeVal);
+        } else if (action.actionType === "Client" || action.actionType === "External") {
+          typeVal = 2;
+        } else {
+          // Padrão correto para ações públicas ou internas (1)
+          typeVal = 1;
+        }
+      }
+
+      return {
+        ...action,
+        type: typeVal,
+      };
+    });
+  }
+
+  return validated as T;
+}
+
+export interface MovideskCredentials {
+  login: string;
+  senha: string;
+}
+
+export function getMovideskTechnicianCredentials(tecnicoName?: string): MovideskCredentials | null {
+  if (!tecnicoName) return null;
+  const nameLower = tecnicoName.toLowerCase().trim();
+
+  if (nameLower.includes("paiva") || nameLower.includes("eduardo paiva")) {
+    return {
+      login: "paivaeduardo",
+      senha: "Acs@2410",
+    };
+  }
+
+  if (nameLower.includes("visgueira") || nameLower.includes("eduardo visgueira")) {
+    return {
+      login: "eduardov",
+      senha: "8524#Edu",
+    };
+  }
+
+  return null;
+}
+
 export async function exportReportToMovidesk(formData: ReportData, token: string) {
   if (!formData.ticket) {
     throw new Error('Informe o número do chamado antes de exportar.');
   }
+
+  const creds = getMovideskTechnicianCredentials(formData.tecnico);
 
   // 1. Try server backend route first (/api/movidesk/export)
   try {
@@ -494,6 +562,7 @@ export async function exportReportToMovidesk(formData: ReportData, token: string
       body: JSON.stringify({
         ...formData,
         token,
+        movideskCredentials: creds,
       }),
     });
 
@@ -607,17 +676,27 @@ export async function exportReportToMovidesk(formData: ReportData, token: string
     </div>
   `;
 
-  const patchBody: any = {
-    id: targetNumericId,
-    actions: [
-      {
-        actionType: 'Public',
-        description: htmlAction,
-        origin: 2,
-      },
-    ],
+  const actionObj: any = {
+    type: 1,
+    actionType: 'Public',
+    description: htmlAction,
+    origin: 2,
   };
 
+  if (creds) {
+    actionObj.createdBy = {
+      id: creds.login,
+      personType: 1,
+      profileType: 1,
+    };
+  }
+
+  let patchBody: any = {
+    id: targetNumericId,
+    actions: [actionObj],
+  };
+
+  let statusAttempted = false;
   if (formData.status) {
     const statusMap: Record<string, string> = {
       'CONCLUIDO': 'Concluído',
@@ -628,45 +707,50 @@ export async function exportReportToMovidesk(formData: ReportData, token: string
     };
     if (statusMap[formData.status]) {
       patchBody.status = statusMap[formData.status];
-      patchBody.justification = "Atendimento de campo e laudo técnico registrado";
-      patchBody.justificationReason = "Atendimento de campo e laudo técnico registrado";
+      statusAttempted = true;
     }
+  }
+
+  // Validação do payload garantindo que actions contenha objetos com 'type' igual a 1 ou 2
+  patchBody = validateMovideskPayload(patchBody);
+
+  const reqHeaders: Record<string, string> = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+  };
+  if (creds) {
+    reqHeaders['X-Movidesk-Login'] = creds.login;
+    reqHeaders['X-Movidesk-Password'] = creds.senha;
   }
 
   const updateUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(token)}&id=${targetNumericId}`;
   let updateRes = await fetch(updateUrl, {
     method: 'PATCH',
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-    },
+    headers: reqHeaders,
     body: JSON.stringify(patchBody),
   });
 
-  if (!updateRes.ok) {
-    const errText = await updateRes.text().catch(() => '');
+  let statusUpdated = statusAttempted;
 
-    if (patchBody.status && (errText.includes("Status") || errText.includes("Reason") || errText.includes("justification"))) {
-      delete patchBody.status;
-      delete patchBody.justification;
-      delete patchBody.justificationReason;
+  if (!updateRes.ok && patchBody.status) {
+    delete patchBody.status;
+    statusUpdated = false;
 
-      updateRes = await fetch(updateUrl, {
-        method: 'PATCH',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(patchBody),
-      });
-    }
-
-    if (!updateRes.ok) {
-      const finalErr = await updateRes.text().catch(() => errText);
-      throw new Error(`Falha ao atualizar no Movidesk (Status ${updateRes.status}): ${finalErr}`);
-    }
+    const fallbackPayload = validateMovideskPayload(patchBody);
+    updateRes = await fetch(updateUrl, {
+      method: 'PATCH',
+      headers: reqHeaders,
+      body: JSON.stringify(fallbackPayload),
+    });
   }
 
-  return `Laudo enviado com sucesso para o Chamado #${cleanId} no Movidesk!`;
+  if (!updateRes.ok) {
+    const finalErr = await updateRes.text().catch(() => '');
+    throw new Error(`Falha ao atualizar no Movidesk (Status ${updateRes.status}): ${finalErr}`);
+  }
+
+  return statusUpdated
+    ? `Laudo e dados enviados com sucesso para o Chamado #${cleanId} no Movidesk!`
+    : `Laudo e evidências incluídos com sucesso no Chamado #${cleanId}!`;
 }
 
