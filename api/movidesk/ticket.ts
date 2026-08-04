@@ -1,3 +1,5 @@
+import { parseTicketFields } from "./parser";
+
 export default async function handler(req: any, res: any) {
   try {
     const id = req.query?.id || req.query?.ticket;
@@ -16,7 +18,7 @@ export default async function handler(req: any, res: any) {
     // Query Movidesk API v1 Tickets endpoint
     const movideskUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
       token
-    )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,actions,customFieldValues`;
+    )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
 
     const response = await fetch(movideskUrl);
 
@@ -38,84 +40,22 @@ export default async function handler(req: any, res: any) {
       return res.status(404).json({ error: `Chamado #${cleanId} não encontrado no Movidesk.` });
     }
 
-    // Helper to strip HTML tags
-    const stripHtml = (html: string) => {
-      if (!html) return "";
-      return html
-        .replace(/<br\s*[\/]?>/gi, "\n")
-        .replace(/<\/p>/gi, "\n\n")
-        .replace(/<[^>]+>/g, "")
-        .replace(/&nbsp;/g, " ")
-        .replace(/&amp;/g, "&")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">")
-        .replace(/&quot;/g, '"')
-        .replace(/\n{3,}/g, "\n\n")
-        .trim();
-    };
-
-    // Extract client details
-    const mainClient = ticket.clients && ticket.clients.length > 0 ? ticket.clients[0] : null;
-    const createdBy = ticket.createdBy;
-
-    const clienteName =
-      mainClient?.businessName ||
-      mainClient?.name ||
-      createdBy?.businessName ||
-      createdBy?.name ||
-      "";
-
-    const cnpj = mainClient?.cpfCnpj || createdBy?.cpfCnpj || "";
-    const tecnico = ticket.owner?.name || ticket.owner?.businessName || "";
-    const acompanhado = mainClient?.name !== clienteName ? mainClient?.name || "" : "";
-
-    // Extract problem description / Fato Constatado from subject or first action
-    let fato = ticket.subject || "";
-    let actionDesc = "";
-
-    if (ticket.actions && ticket.actions.length > 0) {
-      // Find initial public or description action
-      const firstAction = ticket.actions[0];
-      if (firstAction?.description) {
-        actionDesc = stripHtml(firstAction.description);
-      }
-    }
-
-    if (actionDesc) {
-      fato = fato ? `${fato}\n\n${actionDesc}` : actionDesc;
-    }
-
-    // Status Mapping
-    let mappedStatus = "EM_ANDAMENTO";
-    const statusLower = String(ticket.status || "").toLowerCase();
-    if (statusLower.includes("resolv") || statusLower.includes("fechad") || statusLower.includes("conclu")) {
-      mappedStatus = "CONCLUIDO";
-    } else if (statusLower.includes("pendent")) {
-      mappedStatus = "PENDENTE";
-    } else if (statusLower.includes("aguar")) {
-      mappedStatus = "AGUARDANDO_CLIENTE";
-    }
-
-    // Date YYYY-MM-DD
-    let formattedDate = "";
-    if (ticket.createdDate) {
-      formattedDate = String(ticket.createdDate).split("T")[0];
-    }
+    const parsed = parseTicketFields(ticket);
 
     return res.status(200).json({
-      ticket: String(ticket.id || ticket.protocol || cleanId),
-      cliente: clienteName,
-      cnpj: cnpj,
-      tecnico: tecnico,
-      acompanhado: acompanhado,
-      fato: fato,
-      status: mappedStatus,
-      data: formattedDate,
+      ticket: parsed.id || String(cleanId),
+      cliente: parsed.cliente,
+      cnpj: parsed.cnpj,
+      tecnico: parsed.tecnico,
+      acompanhado: parsed.acompanhado,
+      descricaoChamado: parsed.descricaoChamado,
+      fato: parsed.fato,
+      status: parsed.status,
+      data: parsed.dateFormatted,
       raw: {
-        protocol: ticket.protocol,
+        protocol: parsed.protocol,
         category: ticket.category,
         serviceFull: ticket.serviceFull,
-        address: mainClient?.address || "",
       },
     });
   } catch (error) {
