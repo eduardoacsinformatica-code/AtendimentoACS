@@ -1,4 +1,4 @@
 export const DEFAULT_TECNICOS: string[] = [
-  'Luis Eduardo',
+  'Eduardo Paiva',
   'Eduardo Visgueira',
 ];

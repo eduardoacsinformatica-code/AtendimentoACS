@@ -10,7 +10,7 @@ import { SnippetSelectorModal } from './components/SnippetSelectorModal';
 import { SettingsModal } from './components/SettingsModal';
 
 const DEFAULT_SETTINGS: TechSettings = {
-  defaultTecnico: 'Luis Eduardo',
+  defaultTecnico: 'Eduardo Paiva',
   defaultEmpresa: 'ACS Informática - Suporte Técnico',
   autoFormatCnpj: true,
   whatsappFormatStyle: 'detalhado',
@@ -23,7 +23,14 @@ export default function App() {
   const [settings, setSettings] = useState<TechSettings>(() => {
     try {
       const saved = localStorage.getItem('tech_support_settings');
-      return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.defaultTecnico === 'Luis Eduardo') {
+          parsed.defaultTecnico = 'Eduardo Paiva';
+        }
+        return parsed;
+      }
+      return DEFAULT_SETTINGS;
     } catch (e) {
       return DEFAULT_SETTINGS;
     }
