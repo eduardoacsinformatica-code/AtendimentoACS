@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import { parseTicketFields } from "./api/movidesk/parser";
+import { parseTicketFields } from "./src/utils/movideskParser";
 
 async function startServer() {
   const app = express();

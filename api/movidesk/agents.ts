@@ -7,7 +7,8 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const token = req.query?.token || process.env.MOVIDESK_API_TOKEN || "75762c40-5399-4b83-b958-c265fbf5d6fb";
+    const urlObj = new URL(req.url || "", "http://localhost");
+    const token = req.query?.token || urlObj.searchParams.get("token") || process.env.MOVIDESK_API_TOKEN || "75762c40-5399-4b83-b958-c265fbf5d6fb";
 
     if (!token) {
       return res.status(400).json({ error: "Chave de API do Movidesk não informada." });
