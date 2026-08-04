@@ -275,22 +275,30 @@ export const ReportForm: React.FC<ReportFormProps> = ({
     try {
       const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
       let data: any = null;
+      let apiErrorMessage = '';
 
       try {
         const res = await fetch(`/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}&token=${encodeURIComponent(token)}`);
-        if (res.ok) {
-          data = await res.json();
+        const json = await res.json().catch(() => null);
+        if (res.ok && json) {
+          data = json;
+        } else if (json && json.error) {
+          apiErrorMessage = json.error;
         }
       } catch {
-        // Proxy failed
+        // Proxy network error
+      }
+
+      if (!data && !apiErrorMessage) {
+        try {
+          data = await fetchDirectMovideskTicket(ticketNum, token);
+        } catch (directErr: any) {
+          throw new Error(directErr?.message || `Chamado #${ticketNum} não foi encontrado no Movidesk.`);
+        }
       }
 
       if (!data) {
-        data = await fetchDirectMovideskTicket(ticketNum, token);
-      }
-
-      if (!data) {
-        throw new Error(`Chamado #${ticketNum} não foi encontrado no Movidesk.`);
+        throw new Error(apiErrorMessage || `Chamado #${ticketNum} não foi encontrado no Movidesk.`);
       }
 
       setFormData((prev) => ({

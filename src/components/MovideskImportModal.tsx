@@ -228,22 +228,30 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
       const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
       const ticketNum = directTicketId.trim();
       let data: any = null;
+      let apiErrorMessage = '';
 
       try {
         const res = await fetch(`/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}&token=${encodeURIComponent(token)}`);
-        if (res.ok) {
-          data = await res.json();
+        const json = await res.json().catch(() => null);
+        if (res.ok && json) {
+          data = json;
+        } else if (json && json.error) {
+          apiErrorMessage = json.error;
         }
       } catch {
         // Proxy call failed
       }
 
-      if (!data) {
-        data = await fetchDirectMovideskTicket(ticketNum, token);
+      if (!data && !apiErrorMessage) {
+        try {
+          data = await fetchDirectMovideskTicket(ticketNum, token);
+        } catch (directErr: any) {
+          throw new Error(directErr?.message || 'Chamado não encontrado.');
+        }
       }
 
       if (!data || (!data.ticket && !data.cliente)) {
-        throw new Error('Chamado não encontrado.');
+        throw new Error(apiErrorMessage || 'Chamado não encontrado.');
       }
 
       onSelectTicket({

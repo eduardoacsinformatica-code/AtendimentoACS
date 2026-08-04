@@ -6,22 +6,6 @@
       "destination": "/api/cnpj/[cnpj]"
     },
     {
-      "source": "/api/ai/refine",
-      "destination": "/api/ai/refine"
-    },
-    {
-      "source": "/api/movidesk/ticket",
-      "destination": "/api/movidesk/ticket"
-    },
-    {
-      "source": "/api/movidesk/agents",
-      "destination": "/api/movidesk/agents"
-    },
-    {
-      "source": "/api/movidesk/tickets",
-      "destination": "/api/movidesk/tickets"
-    },
-    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

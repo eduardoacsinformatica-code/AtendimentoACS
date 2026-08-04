@@ -14,12 +14,17 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: "Chave de API do Movidesk não informada." });
     }
 
+    const headers = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept": "application/json",
+    };
+
     // Query Movidesk Persons endpoint filtered for personType = 1 (Agents)
     const movideskUrl = `https://api.movidesk.com/public/v1/persons?token=${encodeURIComponent(
       token
     )}&$filter=personType eq 1&$select=id,name,businessName,email`;
 
-    const response = await fetch(movideskUrl);
+    const response = await fetch(movideskUrl, { headers });
 
     let agents: Array<{ id: string; name: string }> = [];
 
