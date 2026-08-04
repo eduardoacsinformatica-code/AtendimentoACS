@@ -208,21 +208,62 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
               <div className="bg-emerald-950/40 border border-emerald-800/50 rounded-lg p-2.5 text-[11px] text-emerald-200 space-y-1">
                 <p className="font-semibold flex items-center text-emerald-300">
                   <Sparkles className="w-3.5 h-3.5 mr-1 text-emerald-400 shrink-0" />
-                  Como a foto será anexada:
+                  Como as imagens são enviadas:
                 </p>
                 <ul className="list-disc list-inside space-y-0.5 text-slate-300 text-[10px]">
                   <li>
-                    <strong className="text-white">No Celular:</strong> Abre o compartilhamento do WhatsApp com fotos e texto juntos.
+                    <strong className="text-white">No Celular:</strong> O WhatsApp abre diretamente com fotos, assinatura e mensagem integradas.
                   </li>
                   <li>
-                    <strong className="text-white">No Computador (WhatsApp Web):</strong> A foto é copiada para a área de transferência. Ao abrir o WhatsApp, pressione <kbd className="px-1 py-0.5 bg-slate-800 text-emerald-300 rounded border border-slate-700 font-mono text-[9px]">Ctrl + V</kbd> para colar a foto no chat!
+                    <strong className="text-white">No Computador (WhatsApp Web):</strong> A imagem principal (assinatura/foto) é copiada. Pressione <kbd className="px-1 py-0.5 bg-slate-800 text-emerald-300 rounded border border-slate-700 font-mono text-[9px]">Ctrl + V</kbd> no WhatsApp para colar!
                   </li>
                 </ul>
               </div>
             </div>
           ) : (
             <p className="text-[11px] text-slate-500 bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
-              Nenhuma foto anexada a este laudo. Apenas a mensagem de texto formatada será enviada.
+              Nenhuma foto de evidência anexada a este laudo.
+            </p>
+          )}
+        </div>
+
+        {/* Client Digital Signature Banner */}
+        <div className="space-y-2 pt-2 border-t border-slate-800">
+          <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+            <span className="flex items-center">
+              <Sparkles className="w-4 h-4 text-emerald-400 mr-1.5" />
+              3. Assinatura Digital do Cliente
+            </span>
+            {reportData.assinaturaCliente ? (
+              <span className="text-[10px] bg-emerald-950 text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-800/60 flex items-center">
+                <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-400" />
+                Anexo da Imagem da Assinatura Incluso
+              </span>
+            ) : (
+              <span className="text-[10px] text-slate-500 font-normal">Não assinada</span>
+            )}
+          </label>
+
+          {reportData.assinaturaCliente ? (
+            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-2">
+              <div className="flex items-center space-x-3">
+                <div className="w-20 h-12 bg-slate-900 rounded-lg border border-slate-700 p-1 flex items-center justify-center shrink-0">
+                  <img src={reportData.assinaturaCliente} alt="Assinatura" className="max-h-full max-w-full object-contain" />
+                </div>
+                <div className="text-xs">
+                  <p className="font-semibold text-white">Imagem da Assinatura Anexada</p>
+                  <p className="text-[10px] text-slate-400">
+                    Responsável: {reportData.acompanhado || reportData.cliente || 'Cliente'}
+                  </p>
+                  <p className="text-[10px] text-emerald-400 mt-0.5">
+                    A imagem da assinatura será enviada no WhatsApp como anexo.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-500 bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
+              Este laudo não possui assinatura digital coletada.
             </p>
           )}
         </div>

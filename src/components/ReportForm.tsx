@@ -5,6 +5,7 @@ import { fetchDirectMovideskTicket } from '../utils/movideskParser';
 import { DEFAULT_TECNICOS } from '../data/tecnicos';
 import { WhatsAppShareModal } from './WhatsAppShareModal';
 import { MovideskImportModal } from './MovideskImportModal';
+import { SignaturePad } from './SignaturePad';
 import { 
   Building2, 
   User, 
@@ -1129,6 +1130,13 @@ export const ReportForm: React.FC<ReportFormProps> = ({
           />
         )}
       </div>
+
+      {/* Client Touch Signature Pad */}
+      <SignaturePad
+        value={formData.assinaturaCliente}
+        onChange={(sig) => handleChange('assinaturaCliente', sig)}
+        clientName={formData.acompanhado || formData.cliente}
+      />
 
       {/* Main Action Bar */}
       <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-end gap-3">

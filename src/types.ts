@@ -28,6 +28,7 @@ export interface ReportData {
   empresaAssinatura: string;
   whatsappDestinatario: string; // Optional phone number
   fotos: string[]; // Base64 or Data URL array of attached photos
+  assinaturaCliente?: string; // Base64 or Data URL of client digital signature
 }
 
 export interface SavedReport extends ReportData {

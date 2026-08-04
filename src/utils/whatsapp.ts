@@ -61,14 +61,28 @@ export async function shareReportToWhatsApp(
   }
 
   const hasPhotos = data.fotos && data.fotos.length > 0;
+  const hasSignature = !!(data.assinaturaCliente && data.assinaturaCliente.trim().length > 0);
 
   // 1. Try Native Web Share API Level 2 (Supported on Mobile Browsers & native share)
-  if (hasPhotos && typeof navigator !== 'undefined' && navigator.share) {
+  if ((hasPhotos || hasSignature) && typeof navigator !== 'undefined' && navigator.share) {
     try {
       const filesToShare: File[] = [];
-      for (let i = 0; i < data.fotos.length; i++) {
-        const file = await dataUrlToFile(data.fotos[i], `evidencia_${i + 1}.jpg`);
-        filesToShare.push(file);
+
+      // Add attached evidence photos
+      if (hasPhotos) {
+        for (let i = 0; i < data.fotos.length; i++) {
+          const file = await dataUrlToFile(data.fotos[i], `evidencia_${i + 1}.jpg`);
+          filesToShare.push(file);
+        }
+      }
+
+      // Add digital signature image as attachment file
+      if (hasSignature && data.assinaturaCliente) {
+        const sigFile = await dataUrlToFile(
+          data.assinaturaCliente,
+          `assinatura_cliente_${data.ticket || 'chamado'}.png`
+        );
+        filesToShare.push(sigFile);
       }
 
       if (navigator.canShare && navigator.canShare({ files: filesToShare })) {
@@ -80,7 +94,11 @@ export async function shareReportToWhatsApp(
         return {
           success: true,
           method: 'web-share',
-          message: 'Relatório e foto(s) compartilhados diretamente no WhatsApp!',
+          message: hasSignature && hasPhotos
+            ? 'Relatório, fotos e imagem da assinatura compartilhados no WhatsApp!'
+            : hasSignature
+            ? 'Relatório e imagem da assinatura compartilhados no WhatsApp!'
+            : 'Relatório e foto(s) de evidência compartilhados no WhatsApp!',
         };
       }
     } catch (err: any) {
@@ -92,11 +110,12 @@ export async function shareReportToWhatsApp(
   }
 
   // 2. Fallback for Desktop or browsers without Web Share file support:
-  // Copy the primary photo to clipboard so user can press Ctrl+V / Paste in WhatsApp Web
+  // Copy signature or evidence photo to clipboard so user can press Ctrl+V in WhatsApp Web
   let copiedPhotoSuccess = false;
-  if (hasPhotos && typeof navigator !== 'undefined' && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+  if ((hasPhotos || hasSignature) && typeof navigator !== 'undefined' && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
     try {
-      const pngBlob = await dataUrlToPngBlob(data.fotos[0]);
+      const imageToCopy = hasSignature && data.assinaturaCliente ? data.assinaturaCliente : data.fotos[0];
+      const pngBlob = await dataUrlToPngBlob(imageToCopy);
       await navigator.clipboard.write([
         new ClipboardItem({
           [pngBlob.type]: pngBlob,

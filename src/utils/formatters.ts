@@ -132,6 +132,13 @@ export function buildWhatsAppMessage(data: ReportData, settings?: TechSettings):
     msg += `${data.fotos.length} foto(s) anexada(s) ao laudo técnico.\n\n`;
   }
 
+  if (data.assinaturaCliente) {
+    msg += `-----------------------------\n`;
+    msg += `✍️ *ASSINATURA DIGITAL DO CLIENTE*\n`;
+    msg += `Assinado digitalmente por: ${data.acompanhado || data.cliente || 'Responsável no Cliente'}\n`;
+    msg += `👇 (Imagem da assinatura em anexo)\n\n`;
+  }
+
   if (data.incluirAssinatura) {
     msg += `=============================\n`;
     msg += `*${data.empresaAssinatura || settings?.defaultEmpresa || 'Atendimento Técnico'}*\n`;

@@ -276,10 +276,19 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
                 <p className="font-bold text-slate-800">{formData.tecnico || 'Técnico Responsável'}</p>
                 <p className="text-[10px] text-slate-500">Assinatura do Técnico</p>
               </div>
-              <div>
+              <div className="flex flex-col items-center justify-end">
+                {formData.assinaturaCliente ? (
+                  <img
+                    src={formData.assinaturaCliente}
+                    alt="Assinatura do Cliente"
+                    className="h-14 max-w-[200px] object-contain mb-1"
+                  />
+                ) : null}
                 <div className="border-b border-slate-400 mb-1 w-3/4 mx-auto" />
                 <p className="font-bold text-slate-800">{formData.acompanhado || 'Responsável no Cliente'}</p>
-                <p className="text-[10px] text-slate-500">De Acordo / Recebido</p>
+                <p className="text-[10px] text-slate-500">
+                  De Acordo / Recebido {formData.assinaturaCliente ? '(Assinado Digitalmente)' : ''}
+                </p>
               </div>
             </div>
 
