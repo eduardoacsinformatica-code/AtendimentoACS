@@ -201,28 +201,49 @@ async function startServer() {
       }
 
       const cleanId = String(id).trim();
+      const numVal = Number(cleanId);
+      const isSmallInt = !isNaN(numVal) && numVal > 0 && numVal <= 2147483647 && cleanId.length < 9;
 
-      // Query Movidesk API v1 Tickets endpoint
-      const movideskUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-        token
-      )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
+      let ticket: any = null;
 
-      const response = await fetch(movideskUrl);
+      // 1. If cleanId is a small integer ID (e.g. 1234), try direct ID lookup first
+      if (isSmallInt) {
+        try {
+          const directUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+            token
+          )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          return res.status(404).json({ error: `Chamado #${cleanId} não foi encontrado no Movidesk.` });
+          const response = await fetch(directUrl);
+          if (response.ok) {
+            const data = await response.json();
+            ticket = Array.isArray(data) ? data[0] : data;
+          }
+        } catch (err) {
+          console.warn("Movidesk direct ID fetch failed in server.ts:", err);
         }
-        return res.status(response.status).json({
-          error: `Erro ao consultar Movidesk (Status ${response.status}). Verifique o token de API.`,
-        });
       }
 
-      const data = await response.json();
-      const ticket = Array.isArray(data) ? data[0] : data;
+      // 2. If not found or cleanId is a protocol number (e.g. 20260801000028), query by protocol filter
+      if (!ticket || (!ticket.id && !ticket.protocol)) {
+        const filterExpr = isSmallInt
+          ? `protocol eq '${cleanId}' or id eq ${cleanId}`
+          : `protocol eq '${cleanId}'`;
+
+        const filterUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+          token
+        )}&$filter=${encodeURIComponent(filterExpr)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
+
+        const filterRes = await fetch(filterUrl);
+        if (filterRes.ok) {
+          const filterData = await filterRes.json();
+          if (Array.isArray(filterData) && filterData.length > 0) {
+            ticket = filterData[0];
+          }
+        }
+      }
 
       if (!ticket || (!ticket.id && !ticket.protocol)) {
-        return res.status(404).json({ error: `Chamado #${cleanId} não encontrado no Movidesk.` });
+        return res.status(404).json({ error: `Chamado #${cleanId} não foi encontrado no Movidesk.` });
       }
 
       const parsed = parseTicketFields(ticket);

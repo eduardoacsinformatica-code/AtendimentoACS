@@ -9,9 +9,20 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const urlObj = new URL(req.url || "", "http://localhost");
-    const id = req.query?.id || req.query?.ticket || urlObj.searchParams.get("id") || urlObj.searchParams.get("ticket");
-    const token = req.query?.token || urlObj.searchParams.get("token") || process.env.MOVIDESK_API_TOKEN || "75762c40-5399-4b83-b958-c265fbf5d6fb";
+    let queryParams: any = req.query || {};
+    if (req.url) {
+      try {
+        const urlObj = new URL(req.url, "http://localhost");
+        urlObj.searchParams.forEach((val, key) => {
+          if (!queryParams[key]) queryParams[key] = val;
+        });
+      } catch {
+        // ignore
+      }
+    }
+
+    const id = queryParams.id || queryParams.ticket;
+    const token = queryParams.token || process.env.MOVIDESK_API_TOKEN || "75762c40-5399-4b83-b958-c265fbf5d6fb";
 
     if (!id) {
       return res.status(400).json({ error: "Número do Ticket/Chamado é obrigatório." });
@@ -27,23 +38,31 @@ export default async function handler(req: any, res: any) {
       "Accept": "application/json",
     };
 
-    // Query Movidesk API v1 Tickets endpoint by id
-    const movideskUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-      token
-    )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
+    const numVal = Number(cleanId);
+    const isSmallInt = !isNaN(numVal) && numVal > 0 && numVal <= 2147483647 && cleanId.length < 9;
 
-    let response = await fetch(movideskUrl, { headers });
     let ticket: any = null;
 
-    if (response.ok) {
-      const data = await response.json();
-      ticket = Array.isArray(data) ? data[0] : data;
+    // 1. If cleanId is a small integer ID (e.g. 1234), try direct ID lookup first
+    if (isSmallInt) {
+      try {
+        const directUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+          token
+        )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
+
+        const response = await fetch(directUrl, { headers });
+        if (response.ok) {
+          const data = await response.json();
+          ticket = Array.isArray(data) ? data[0] : data;
+        }
+      } catch (err) {
+        console.warn("Movidesk direct ID fetch failed:", err);
+      }
     }
 
-    // Fallback: If querying by id returns null or empty, try querying by protocol or filter
+    // 2. If not found or cleanId is a protocol number (e.g. 20260801000028), query by protocol filter
     if (!ticket || (!ticket.id && !ticket.protocol)) {
-      const isNum = !isNaN(Number(cleanId));
-      const filterExpr = isNum
+      const filterExpr = isSmallInt
         ? `protocol eq '${cleanId}' or id eq ${cleanId}`
         : `protocol eq '${cleanId}'`;
 
@@ -84,6 +103,7 @@ export default async function handler(req: any, res: any) {
     });
   } catch (error) {
     console.error("Erro na rota Movidesk Proxy:", error);
+    res.setHeader("Access-Control-Allow-Origin", "*");
     return res.status(500).json({
       error: error instanceof Error ? error.message : "Erro interno ao se comunicar com o Movidesk.",
     });
