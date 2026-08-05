@@ -1,6 +1,6 @@
 import { ReportData } from "../../src/types";
 
-import { validateMovideskPayload, getMovideskTechnicianCredentials } from "../../src/utils/movideskParser";
+import { validateMovideskPayload } from "../../src/utils/movideskParser";
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -22,6 +22,7 @@ export default async function handler(req: any, res: any) {
       token: userToken,
       cliente,
       acompanhado,
+      fato,
       diagnostico,
       observacoes,
       fotos,
@@ -36,19 +37,12 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: "Número do Ticket/Chamado é obrigatório para exportação." });
     }
 
-    const creds = (body as any).movideskCredentials || getMovideskTechnicianCredentials(tecnico);
-
     const cleanId = String(ticket).trim();
-    const headers: Record<string, string> = {
+    const headers = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
       "Accept": "application/json",
       "Content-Type": "application/json",
     };
-
-    if (creds) {
-      headers["X-Movidesk-Login"] = creds.login;
-      headers["X-Movidesk-Password"] = creds.senha;
-    }
 
     let targetNumericId: number | null = null;
 
@@ -108,6 +102,11 @@ export default async function handler(req: any, res: any) {
         </p>
 
         <div style="margin-bottom: 14px;">
+          <strong>🔍 Fato Constatado:</strong>
+          <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0; margin-top: 4px; white-space: pre-wrap; font-size: 13px;">${fato || 'Não informado'}</div>
+        </div>
+
+        <div style="margin-bottom: 14px;">
           <strong>🛠️ Diagnóstico e Ações Realizadas:</strong>
           <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0; margin-top: 4px; white-space: pre-wrap; font-size: 13px;">${diagnostico || 'Nenhuma ação registrada'}</div>
         </div>
@@ -145,25 +144,17 @@ export default async function handler(req: any, res: any) {
       </div>
     `;
 
-    const actionObj: any = {
-      type: 1,
-      actionType: "Public",
-      description: htmlAction,
-      origin: 2,
-    };
-
-    if (creds) {
-      actionObj.createdBy = {
-        id: creds.login,
-        personType: 1,
-        profileType: 1,
-      };
-    }
-
     // Movidesk PATCH body
     let patchBody: any = {
       id: targetNumericId,
-      actions: [actionObj],
+      actions: [
+        {
+          type: 2,
+          actionType: "Public",
+          description: htmlAction,
+          origin: 2,
+        },
+      ],
     };
 
     let statusAttempted = false;

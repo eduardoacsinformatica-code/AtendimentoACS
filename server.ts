@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import { parseTicketFields, validateMovideskPayload, getMovideskTechnicianCredentials } from "./src/utils/movideskParser";
+import { parseTicketFields, validateMovideskPayload } from "./src/utils/movideskParser";
 
 async function startServer() {
   const app = express();
@@ -280,6 +280,7 @@ async function startServer() {
         token: userToken,
         cliente,
         acompanhado,
+        fato,
         diagnostico,
         observacoes,
         fotos,
@@ -352,6 +353,11 @@ async function startServer() {
           </p>
 
           <div style="margin-bottom: 14px;">
+            <strong>🔍 Fato Constatado:</strong>
+            <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0; margin-top: 4px; white-space: pre-wrap; font-size: 13px;">${fato || 'Não informado'}</div>
+          </div>
+
+          <div style="margin-bottom: 14px;">
             <strong>🛠️ Diagnóstico e Ações Realizadas:</strong>
             <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0; margin-top: 4px; white-space: pre-wrap; font-size: 13px;">${diagnostico || 'Nenhuma ação registrada'}</div>
           </div>
@@ -389,26 +395,16 @@ async function startServer() {
         </div>
       `;
 
-      const creds = req.body?.movideskCredentials || getMovideskTechnicianCredentials(tecnico);
-
-      const actionObj: any = {
-        type: 1,
-        actionType: "Public",
-        description: htmlAction,
-        origin: 2,
-      };
-
-      if (creds) {
-        actionObj.createdBy = {
-          id: creds.login,
-          personType: 1,
-          profileType: 1,
-        };
-      }
-
       let patchBody: any = {
         id: targetNumericId,
-        actions: [actionObj],
+        actions: [
+          {
+            type: 2,
+            actionType: "Public",
+            description: htmlAction,
+            origin: 2,
+          },
+        ],
       };
 
       let statusAttempted = false;
@@ -428,19 +424,13 @@ async function startServer() {
 
       patchBody = validateMovideskPayload(patchBody);
 
-      const reqHeaders: Record<string, string> = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-      };
-      if (creds) {
-        reqHeaders["X-Movidesk-Login"] = creds.login;
-        reqHeaders["X-Movidesk-Password"] = creds.senha;
-      }
-
       const updateUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(token)}&id=${targetNumericId}`;
       let updateRes = await fetch(updateUrl, {
         method: "PATCH",
-        headers: reqHeaders,
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(patchBody),
       });
 
@@ -454,7 +444,10 @@ async function startServer() {
         const fallbackPayload = validateMovideskPayload(patchBody);
         updateRes = await fetch(updateUrl, {
           method: "PATCH",
-          headers: reqHeaders,
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify(fallbackPayload),
         });
       }

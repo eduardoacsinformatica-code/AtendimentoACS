@@ -99,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                 }`}
               >
-                Gerador
+                Página inicial
               </button>
               <button
                 onClick={() => setActiveTab('history')}

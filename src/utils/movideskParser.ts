@@ -481,8 +481,8 @@ export async function fetchDirectMovideskTickets(token: string, agentId?: string
 
 /**
  * Valida e sanitiza o payload do Movidesk antes do envio, garantindo que
- * o array 'actions' contenha apenas objetos com a propriedade 'type' igual a 1 ou 2.
- * Converte qualquer valor inválido ou ausente para o padrão correto.
+ * o array 'actions' contenha apenas objetos com a propriedade 'type' igual a 1 (Interna) ou 2 (Pública).
+ * Converte qualquer valor para o padrão correto de ação pública (2).
  */
 export function validateMovideskPayload<T extends Record<string, any>>(payload: T): T {
   if (!payload || typeof payload !== 'object') {
@@ -494,24 +494,28 @@ export function validateMovideskPayload<T extends Record<string, any>>(payload: 
   if (Array.isArray(validated.actions)) {
     validated.actions = validated.actions.map((action: any) => {
       if (!action || typeof action !== 'object') {
-        return { type: 1, actionType: 'Public' };
+        return { type: 2, actionType: 'Public' };
       }
 
       let typeVal = action.type;
       if (typeVal !== 1 && typeVal !== 2) {
         if (typeVal === "1" || typeVal === "2") {
           typeVal = Number(typeVal);
-        } else if (action.actionType === "Client" || action.actionType === "External") {
-          typeVal = 2;
         } else {
-          // Padrão correto para ações públicas ou internas (1)
-          typeVal = 1;
+          // Padrão correto para ações públicas (2)
+          typeVal = 2;
         }
+      }
+
+      // Se actionType for Public ou estiver em branco, garante tipo 2 (Ação Pública)
+      if (action.actionType === 'Public' || !action.actionType) {
+        typeVal = 2;
       }
 
       return {
         ...action,
         type: typeVal,
+        actionType: action.actionType || 'Public',
       };
     });
   }
@@ -519,38 +523,10 @@ export function validateMovideskPayload<T extends Record<string, any>>(payload: 
   return validated as T;
 }
 
-export interface MovideskCredentials {
-  login: string;
-  senha: string;
-}
-
-export function getMovideskTechnicianCredentials(tecnicoName?: string): MovideskCredentials | null {
-  if (!tecnicoName) return null;
-  const nameLower = tecnicoName.toLowerCase().trim();
-
-  if (nameLower.includes("paiva") || nameLower.includes("eduardo paiva")) {
-    return {
-      login: "paivaeduardo",
-      senha: "Acs@2410",
-    };
-  }
-
-  if (nameLower.includes("visgueira") || nameLower.includes("eduardo visgueira")) {
-    return {
-      login: "eduardov",
-      senha: "8524#Edu",
-    };
-  }
-
-  return null;
-}
-
 export async function exportReportToMovidesk(formData: ReportData, token: string) {
   if (!formData.ticket) {
     throw new Error('Informe o número do chamado antes de exportar.');
   }
-
-  const creds = getMovideskTechnicianCredentials(formData.tecnico);
 
   // 1. Try server backend route first (/api/movidesk/export)
   try {
@@ -562,7 +538,6 @@ export async function exportReportToMovidesk(formData: ReportData, token: string
       body: JSON.stringify({
         ...formData,
         token,
-        movideskCredentials: creds,
       }),
     });
 
@@ -639,6 +614,11 @@ export async function exportReportToMovidesk(formData: ReportData, token: string
       </p>
 
       <div style="margin-bottom: 14px;">
+        <strong>🔍 Fato Constatado:</strong>
+        <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0; margin-top: 4px; white-space: pre-wrap; font-size: 13px;">${formData.fato || 'Não informado'}</div>
+      </div>
+
+      <div style="margin-bottom: 14px;">
         <strong>🛠️ Diagnóstico e Ações Realizadas:</strong>
         <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0; margin-top: 4px; white-space: pre-wrap; font-size: 13px;">${formData.diagnostico || 'Nenhuma ação registrada'}</div>
       </div>
@@ -676,24 +656,16 @@ export async function exportReportToMovidesk(formData: ReportData, token: string
     </div>
   `;
 
-  const actionObj: any = {
-    type: 1,
-    actionType: 'Public',
-    description: htmlAction,
-    origin: 2,
-  };
-
-  if (creds) {
-    actionObj.createdBy = {
-      id: creds.login,
-      personType: 1,
-      profileType: 1,
-    };
-  }
-
   let patchBody: any = {
     id: targetNumericId,
-    actions: [actionObj],
+    actions: [
+      {
+        type: 2,
+        actionType: 'Public',
+        description: htmlAction,
+        origin: 2,
+      },
+    ],
   };
 
   let statusAttempted = false;
@@ -714,19 +686,13 @@ export async function exportReportToMovidesk(formData: ReportData, token: string
   // Validação do payload garantindo que actions contenha objetos com 'type' igual a 1 ou 2
   patchBody = validateMovideskPayload(patchBody);
 
-  const reqHeaders: Record<string, string> = {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-  };
-  if (creds) {
-    reqHeaders['X-Movidesk-Login'] = creds.login;
-    reqHeaders['X-Movidesk-Password'] = creds.senha;
-  }
-
   const updateUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(token)}&id=${targetNumericId}`;
   let updateRes = await fetch(updateUrl, {
     method: 'PATCH',
-    headers: reqHeaders,
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(patchBody),
   });
 
@@ -739,7 +705,10 @@ export async function exportReportToMovidesk(formData: ReportData, token: string
     const fallbackPayload = validateMovideskPayload(patchBody);
     updateRes = await fetch(updateUrl, {
       method: 'PATCH',
-      headers: reqHeaders,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(fallbackPayload),
     });
   }
