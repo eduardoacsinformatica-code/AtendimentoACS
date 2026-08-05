@@ -129,6 +129,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </p>
           </div>
 
+          {/* Movidesk API Token */}
+          <div className="pt-2 border-t border-slate-800">
+            <label className="block text-xs font-semibold text-slate-300 mb-1">
+              Chave de API do Movidesk (Token)
+            </label>
+            <input
+              type="text"
+              value={formData.movideskToken || ''}
+              onChange={(e) =>
+                setFormData({ ...formData, movideskToken: e.target.value })
+              }
+              placeholder="Ex: 75762c40-5399-4b83-b958-c265fbf5d6fb"
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">
+              Token de integração da API pública do Movidesk (deixe em branco para usar o padrão).
+            </p>
+          </div>
+
           {/* Auto Format CNPJ Toggle */}
           <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
             <div>

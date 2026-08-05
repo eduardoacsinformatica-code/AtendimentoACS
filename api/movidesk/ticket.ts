@@ -32,7 +32,9 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: "Chave de API do Movidesk não informada." });
     }
 
-    const cleanId = String(id).trim();
+    const cleanId = String(id).replace(/^[#\s]+/, "").trim();
+    const numVal = Number(cleanId);
+    const isValidInt32 = !isNaN(numVal) && numVal > 0 && numVal <= 2147483647 && Number.isInteger(numVal);
     const headers = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "Accept": "application/json",
@@ -40,28 +42,29 @@ export default async function handler(req: any, res: any) {
 
     let ticket: any = null;
 
-    // 1. Try direct ID query first
-    try {
-      const directUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-        token
-      )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
+    // 1. Try direct ID query first (only if valid Int32 number)
+    if (isValidInt32) {
+      try {
+        const directUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+          token
+        )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
 
-      const response = await fetch(directUrl, { headers });
-      if (response.ok) {
-        const data = await response.json();
-        const candidate = Array.isArray(data) ? data[0] : data;
-        if (candidate && (candidate.id || candidate.protocol)) {
-          ticket = candidate;
+        const response = await fetch(directUrl, { headers });
+        if (response.ok) {
+          const data = await response.json();
+          const candidate = Array.isArray(data) ? data[0] : data;
+          if (candidate && (candidate.id || candidate.protocol)) {
+            ticket = candidate;
+          }
         }
+      } catch (err) {
+        console.warn("Movidesk direct ID fetch failed, trying filter:", err);
       }
-    } catch (err) {
-      console.warn("Movidesk direct ID fetch failed, trying filter:", err);
     }
 
     // 2. Fallback: Query by protocol or id filter
     if (!ticket || (!ticket.id && !ticket.protocol)) {
-      const isNum = !isNaN(Number(cleanId));
-      const filterExpr = isNum
+      const filterExpr = isValidInt32
         ? `protocol eq '${cleanId}' or id eq ${cleanId}`
         : `protocol eq '${cleanId}'`;
 

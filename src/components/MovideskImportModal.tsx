@@ -192,7 +192,7 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
           tecnico: data.tecnico || ticketItem.tecnico || '',
           acompanhado: data.acompanhado || ticketItem.acompanhado,
           descricaoChamado: data.descricaoChamado || ticketItem.descricaoChamado || ticketItem.subject,
-          fato: '',
+          fato: data.fato !== undefined ? data.fato : (ticketItem.fato || ''),
           status: (data.status as any) || ticketItem.status,
           data: data.data || ticketItem.dateFormatted,
         });

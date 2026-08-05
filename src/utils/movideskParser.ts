@@ -309,6 +309,12 @@ export const parseTicketFields = (t: any) => {
 
   const finalDescricaoChamado = extractOnlyDescription(rawDesc) || rawDesc;
   let fato = "";
+  for (const txt of rawTexts) {
+    const matchFato = txt.match(/(?:[^\w\s]*\s*)?Fato\s+(?:Constatado)?\s*:\s*([^\r\n]+)/i);
+    if (matchFato && matchFato[1].trim() && !fato) {
+      fato = matchFato[1].trim().replace(/^[*_#\s]+|[*_#\s]+$/g, "");
+    }
+  }
   const subject = t.subject || "";
 
   let mappedStatus = "EM_ANDAMENTO";
@@ -346,31 +352,34 @@ export const parseTicketFields = (t: any) => {
 };
 
 export async function fetchDirectMovideskTicket(ticketId: string, token: string) {
-  const cleanId = String(ticketId).trim();
+  const cleanId = String(ticketId).replace(/^[#\s]+/, "").trim();
+  const numVal = Number(cleanId);
+  const isValidInt32 = !isNaN(numVal) && numVal > 0 && numVal <= 2147483647 && Number.isInteger(numVal);
   let ticket: any = null;
 
-  // 1. Direct ID query first
-  try {
-    const movideskUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-      token
-    )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
+  // 1. Direct ID query first (only if valid Int32 number)
+  if (isValidInt32) {
+    try {
+      const movideskUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+        token
+      )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
 
-    const response = await fetch(movideskUrl);
-    if (response.ok) {
-      const data = await response.json();
-      const candidate = Array.isArray(data) ? data[0] : data;
-      if (candidate && (candidate.id || candidate.protocol)) {
-        ticket = candidate;
+      const response = await fetch(movideskUrl);
+      if (response.ok) {
+        const data = await response.json();
+        const candidate = Array.isArray(data) ? data[0] : data;
+        if (candidate && (candidate.id || candidate.protocol)) {
+          ticket = candidate;
+        }
       }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
 
   // 2. Filter fallback
   if (!ticket || (!ticket.id && !ticket.protocol)) {
-    const isNum = !isNaN(Number(cleanId));
-    const filterExpr = isNum
+    const filterExpr = isValidInt32
       ? `protocol eq '${cleanId}' or id eq ${cleanId}`
       : `protocol eq '${cleanId}'`;
 
@@ -557,30 +566,33 @@ export async function exportReportToMovidesk(formData: ReportData, token: string
   }
 
   // 2. Client-side Direct Fallback
-  const cleanId = String(formData.ticket).trim();
+  const cleanId = String(formData.ticket).replace(/^[#\s]+/, "").trim();
+  const numVal = Number(cleanId);
+  const isValidInt32 = !isNaN(numVal) && numVal > 0 && numVal <= 2147483647 && Number.isInteger(numVal);
   let targetNumericId: number | null = null;
 
-  // Try direct ID lookup first
-  try {
-    const directUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-      token
-    )}&id=${encodeURIComponent(cleanId)}`;
+  // Try direct ID lookup first (only if valid Int32 number)
+  if (isValidInt32) {
+    try {
+      const directUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+        token
+      )}&id=${encodeURIComponent(cleanId)}`;
 
-    const directRes = await fetch(directUrl);
-    if (directRes.ok) {
-      const directData = await directRes.json();
-      const candidate = Array.isArray(directData) ? directData[0] : directData;
-      if (candidate && candidate.id) {
-        targetNumericId = candidate.id;
+      const directRes = await fetch(directUrl);
+      if (directRes.ok) {
+        const directData = await directRes.json();
+        const candidate = Array.isArray(directData) ? directData[0] : directData;
+        if (candidate && candidate.id) {
+          targetNumericId = candidate.id;
+        }
       }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
 
   if (!targetNumericId) {
-    const isNum = !isNaN(Number(cleanId));
-    const filterExpr = isNum ? `protocol eq '${cleanId}' or id eq ${cleanId}` : `protocol eq '${cleanId}'`;
+    const filterExpr = isValidInt32 ? `protocol eq '${cleanId}' or id eq ${cleanId}` : `protocol eq '${cleanId}'`;
     const filterUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
       token
     )}&$filter=${encodeURIComponent(filterExpr)}`;
