@@ -357,8 +357,44 @@ export async function fetchDirectMovideskTicket(ticketId: string, token: string)
   const isValidInt32 = !isNaN(numVal) && numVal > 0 && numVal <= 2147483647 && Number.isInteger(numVal);
   let ticket: any = null;
 
-  // 1. Direct ID query first (only if valid Int32 number)
-  if (isValidInt32) {
+  // 1. Try protocol lookup first
+  try {
+    const filterProtocolUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+      token
+    )}&$filter=${encodeURIComponent(`protocol eq '${cleanId}'`)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
+
+    const response = await fetch(filterProtocolUrl);
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data) && data.length > 0) {
+        ticket = data[0];
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Try ID filter lookup if not found
+  if ((!ticket || (!ticket.id && !ticket.protocol)) && isValidInt32) {
+    try {
+      const filterIdUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+        token
+      )}&$filter=${encodeURIComponent(`id eq ${cleanId}`)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
+
+      const response = await fetch(filterIdUrl);
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          ticket = data[0];
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Try direct ID param lookup if still not found
+  if ((!ticket || (!ticket.id && !ticket.protocol)) && isValidInt32) {
     try {
       const movideskUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
         token
@@ -374,25 +410,6 @@ export async function fetchDirectMovideskTicket(ticketId: string, token: string)
       }
     } catch {
       // ignore
-    }
-  }
-
-  // 2. Filter fallback
-  if (!ticket || (!ticket.id && !ticket.protocol)) {
-    const filterExpr = isValidInt32
-      ? `protocol eq '${cleanId}' or id eq ${cleanId}`
-      : `protocol eq '${cleanId}'`;
-
-    const filterUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-      token
-    )}&$filter=${encodeURIComponent(filterExpr)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
-
-    const filterRes = await fetch(filterUrl);
-    if (filterRes.ok) {
-      const filterData = await filterRes.json();
-      if (Array.isArray(filterData) && filterData.length > 0) {
-        ticket = filterData[0];
-      }
     }
   }
 
@@ -571,8 +588,44 @@ export async function exportReportToMovidesk(formData: ReportData, token: string
   const isValidInt32 = !isNaN(numVal) && numVal > 0 && numVal <= 2147483647 && Number.isInteger(numVal);
   let targetNumericId: number | null = null;
 
-  // Try direct ID lookup first (only if valid Int32 number)
-  if (isValidInt32) {
+  // 1. Try protocol lookup
+  try {
+    const protocolUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+      token
+    )}&$filter=${encodeURIComponent(`protocol eq '${cleanId}'`)}`;
+
+    const protocolRes = await fetch(protocolUrl);
+    if (protocolRes.ok) {
+      const protocolData = await protocolRes.json();
+      if (Array.isArray(protocolData) && protocolData.length > 0 && protocolData[0].id) {
+        targetNumericId = protocolData[0].id;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Try ID filter lookup
+  if (!targetNumericId && isValidInt32) {
+    try {
+      const idFilterUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+        token
+      )}&$filter=${encodeURIComponent(`id eq ${cleanId}`)}`;
+
+      const idRes = await fetch(idFilterUrl);
+      if (idRes.ok) {
+        const idData = await idRes.json();
+        if (Array.isArray(idData) && idData.length > 0 && idData[0].id) {
+          targetNumericId = idData[0].id;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Try direct ID param lookup
+  if (!targetNumericId && isValidInt32) {
     try {
       const directUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
         token
@@ -588,21 +641,6 @@ export async function exportReportToMovidesk(formData: ReportData, token: string
       }
     } catch {
       // ignore
-    }
-  }
-
-  if (!targetNumericId) {
-    const filterExpr = isValidInt32 ? `protocol eq '${cleanId}' or id eq ${cleanId}` : `protocol eq '${cleanId}'`;
-    const filterUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-      token
-    )}&$filter=${encodeURIComponent(filterExpr)}`;
-
-    const filterRes = await fetch(filterUrl);
-    if (filterRes.ok) {
-      const filterData = await filterRes.json();
-      if (Array.isArray(filterData) && filterData.length > 0 && filterData[0].id) {
-        targetNumericId = filterData[0].id;
-      }
     }
   }
 

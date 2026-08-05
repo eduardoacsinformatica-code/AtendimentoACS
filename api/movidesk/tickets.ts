@@ -1,5 +1,14 @@
 import { parseTicketFields } from "../../src/utils/movideskParser";
 
+export const maxDuration = 30;
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: "10mb",
+    },
+  },
+};
+
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -22,7 +31,7 @@ export default async function handler(req: any, res: any) {
 
     const movideskUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
       token
-    )}&$select=id,protocol,subject,createdDate,status,owner,createdBy&$expand=clients,owner,createdBy,actions,customFieldValues&$orderby=createdDate desc&$top=200`;
+    )}&$expand=clients,owner,createdBy,actions,customFieldValues&$orderby=createdDate desc&$top=150`;
 
     const response = await fetch(movideskUrl, {
       headers: {
