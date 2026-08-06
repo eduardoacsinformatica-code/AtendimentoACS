@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ReportData, TechSettings } from '../types';
-import { shareReportToWhatsApp, ShareResult } from '../utils/whatsapp';
+import { shareReportToWhatsApp, ShareResult, isMobileDevice } from '../utils/whatsapp';
 import { buildWhatsAppMessage } from '../utils/formatters';
 import { MovideskLaudoCard } from './MovideskLaudoCard';
 import { generateElementBlob, downloadElementImage, copyElementImageToClipboard } from '../utils/imageExport';
@@ -98,27 +98,29 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
     setIsSending(true);
     setShareResult(null);
 
-    // Pre-open popup synchronously during click event handler to bypass browser popup blockers
+    // Pre-open popup on desktop to bypass popup blockers (on mobile, avoid opening extra blank tab)
     let targetWindow: Window | null = null;
-    try {
-      targetWindow = window.open('about:blank', '_blank');
-      if (targetWindow) {
-        targetWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head><title>Abrindo WhatsApp...</title></head>
-            <body style="font-family: system-ui, -apple-system, sans-serif; background: #0b141a; color: #e9edef; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
-              <div style="text-align: center; max-width: 400px; background: #111b21; padding: 30px; border-radius: 16px; border: 1px solid #222d34; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-                <div style="font-size: 32px; margin-bottom: 12px;">💬</div>
-                <p style="font-size: 16px; font-weight: 700; margin: 0 0 8px 0; color: #25d366;">Gerando Laudo do Atendimento...</p>
-                <p style="font-size: 13px; color: #8696a0; margin: 0; line-height: 1.5;">Aguarde alguns segundos. A conversa no WhatsApp será aberta automaticamente.</p>
-              </div>
-            </body>
-          </html>
-        `);
+    if (!isMobileDevice()) {
+      try {
+        targetWindow = window.open('about:blank', '_blank');
+        if (targetWindow) {
+          targetWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+              <head><title>Abrindo WhatsApp...</title></head>
+              <body style="font-family: system-ui, -apple-system, sans-serif; background: #0b141a; color: #e9edef; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+                <div style="text-align: center; max-width: 400px; background: #111b21; padding: 30px; border-radius: 16px; border: 1px solid #222d34; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+                  <div style="font-size: 32px; margin-bottom: 12px;">💬</div>
+                  <p style="font-size: 16px; font-weight: 700; margin: 0 0 8px 0; color: #25d366;">Gerando Laudo do Atendimento...</p>
+                  <p style="font-size: 13px; color: #8696a0; margin: 0; line-height: 1.5;">Aguarde alguns segundos. A conversa no WhatsApp será aberta automaticamente.</p>
+                </div>
+              </body>
+            </html>
+          `);
+        }
+      } catch (e) {
+        console.warn('Não foi possível pré-abrir janela:', e);
       }
-    } catch (e) {
-      console.warn('Não foi possível pré-abrir janela:', e);
     }
 
     const targetPhone = sendMode === 'number' ? phoneNumber : '';

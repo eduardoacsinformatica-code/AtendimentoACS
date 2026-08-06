@@ -44,6 +44,11 @@ export interface ShareResult {
   message?: string;
 }
 
+export const isMobileDevice = (): boolean => {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
 /**
  * Main helper to share a report via WhatsApp with photos and recipient choice
  */
@@ -63,18 +68,39 @@ export async function shareReportToWhatsApp(
     cleanPhone = '55' + cleanPhone;
   }
 
+  const isMobile = isMobileDevice();
   const encodedText = encodeURIComponent(messageText);
-  const whatsappUrl = cleanPhone
-    ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`
-    : `https://api.whatsapp.com/send?text=${encodedText}`;
+
+  let whatsappUrl = '';
+  if (isMobile) {
+    whatsappUrl = cleanPhone
+      ? `whatsapp://send?phone=${cleanPhone}&text=${encodedText}`
+      : `whatsapp://send?text=${encodedText}`;
+  } else {
+    whatsappUrl = cleanPhone
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`
+      : `https://api.whatsapp.com/send?text=${encodedText}`;
+  }
 
   const openWhatsApp = () => {
-    if (targetWindow && !targetWindow.closed) {
-      targetWindow.location.href = whatsappUrl;
+    if (isMobile) {
+      // On mobile, trigger direct app deep link
+      window.location.href = whatsappUrl;
+      // Fallback to wa.me universal link if custom scheme fails
+      setTimeout(() => {
+        const waMeUrl = cleanPhone
+          ? `https://wa.me/${cleanPhone}?text=${encodedText}`
+          : `https://wa.me/?text=${encodedText}`;
+        window.location.href = waMeUrl;
+      }, 500);
     } else {
-      const win = window.open(whatsappUrl, '_blank');
-      if (!win) {
-        window.location.href = whatsappUrl;
+      if (targetWindow && !targetWindow.closed) {
+        targetWindow.location.href = whatsappUrl;
+      } else {
+        const win = window.open(whatsappUrl, '_blank');
+        if (!win) {
+          window.location.href = whatsappUrl;
+        }
       }
     }
   };
