@@ -71,35 +71,38 @@ export async function shareReportToWhatsApp(
   const isMobile = isMobileDevice();
   const encodedText = encodeURIComponent(messageText);
 
-  let whatsappUrl = '';
-  if (isMobile) {
-    whatsappUrl = cleanPhone
-      ? `whatsapp://send?phone=${cleanPhone}&text=${encodedText}`
-      : `whatsapp://send?text=${encodedText}`;
-  } else {
-    whatsappUrl = cleanPhone
-      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`
-      : `https://api.whatsapp.com/send?text=${encodedText}`;
-  }
+  const openWhatsApp = (includeText: boolean = true) => {
+    const textParam = includeText ? `text=${encodedText}` : '';
 
-  const openWhatsApp = () => {
     if (isMobile) {
-      // On mobile, trigger direct app deep link
-      window.location.href = whatsappUrl;
-      // Fallback to wa.me universal link if custom scheme fails
+      let url = '';
+      let waMeUrl = '';
+      if (cleanPhone) {
+        url = `whatsapp://send?phone=${cleanPhone}${textParam ? '&' + textParam : ''}`;
+        waMeUrl = `https://wa.me/${cleanPhone}${textParam ? '?' + textParam : ''}`;
+      } else {
+        url = `whatsapp://send${textParam ? '?' + textParam : ''}`;
+        waMeUrl = `https://wa.me/${textParam ? '?' + textParam : ''}`;
+      }
+
+      window.location.href = url;
       setTimeout(() => {
-        const waMeUrl = cleanPhone
-          ? `https://wa.me/${cleanPhone}?text=${encodedText}`
-          : `https://wa.me/?text=${encodedText}`;
         window.location.href = waMeUrl;
       }, 500);
     } else {
-      if (targetWindow && !targetWindow.closed) {
-        targetWindow.location.href = whatsappUrl;
+      let url = '';
+      if (cleanPhone) {
+        url = `https://api.whatsapp.com/send?phone=${cleanPhone}${textParam ? '&' + textParam : ''}`;
       } else {
-        const win = window.open(whatsappUrl, '_blank');
+        url = `https://api.whatsapp.com/send${textParam ? '?' + textParam : ''}`;
+      }
+
+      if (targetWindow && !targetWindow.closed) {
+        targetWindow.location.href = url;
+      } else {
+        const win = window.open(url, '_blank');
         if (!win) {
-          window.location.href = whatsappUrl;
+          window.location.href = url;
         }
       }
     }
@@ -118,7 +121,7 @@ export async function shareReportToWhatsApp(
   const hasPhotos = data.fotos && data.fotos.length > 0;
   const hasSignature = !!(data.assinaturaCliente && data.assinaturaCliente.trim().length > 0);
 
-  // 1. If formatStyle is 'movidesk' and cardImageBlob exists, prioritize sharing the Movidesk Card image
+  // 1. If formatStyle is 'movidesk' and cardImageBlob exists, prioritize sharing ONLY the Movidesk Card image
   if (formatStyle === 'movidesk' && cardImageBlob) {
     const cardFile = new File([cardImageBlob], `Laudo_Movidesk_${data.ticket || 'chamado'}.png`, { type: 'image/png' });
 
@@ -127,7 +130,6 @@ export async function shareReportToWhatsApp(
       try {
         await navigator.share({
           title: `Laudo Técnico #${data.ticket || 'S/N'} - ${data.cliente || ''}`,
-          text: messageText,
           files: [cardFile],
         });
         sharedViaWebShare = true;
@@ -149,7 +151,7 @@ export async function shareReportToWhatsApp(
       };
     }
 
-    // Fallback: Copy image to Clipboard & open WhatsApp
+    // Fallback: Copy image to Clipboard & open WhatsApp without pre-filled text
     let copiedImageSuccess = false;
     if (typeof navigator !== 'undefined' && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
       try {
@@ -164,15 +166,15 @@ export async function shareReportToWhatsApp(
       }
     }
 
-    openWhatsApp();
+    openWhatsApp(false);
 
     return {
       success: true,
       method: 'clipboard-and-url',
       copiedPhoto: copiedImageSuccess,
       message: copiedImageSuccess
-        ? 'WhatsApp aberto! A imagem do Laudo (Estilo Movidesk) foi copiada. Pressione Ctrl+V para colar a imagem na conversa do WhatsApp!'
-        : 'WhatsApp aberto com o texto do Laudo Movidesk!',
+        ? 'WhatsApp aberto! A imagem do Laudo Movidesk foi copiada. Pressione Colar (Ctrl+V ou toque em Colar) na conversa do WhatsApp para enviar a imagem!'
+        : 'WhatsApp aberto!',
     };
   }
 
