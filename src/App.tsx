@@ -13,7 +13,7 @@ const DEFAULT_SETTINGS: TechSettings = {
   defaultTecnico: 'Eduardo Paiva',
   defaultEmpresa: 'ACS Informática - Suporte Técnico',
   autoFormatCnpj: true,
-  whatsappFormatStyle: 'detalhado',
+  whatsappFormatStyle: 'atual',
   movideskToken: '75762c40-5399-4b83-b958-c265fbf5d6fb',
   movideskDomain: 'acsautomacao.movidesk.com',
 };

@@ -2,15 +2,6 @@ import { ReportData } from "../../src/types";
 
 import { validateMovideskPayload } from "../../src/utils/movideskParser";
 
-export const maxDuration = 30;
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "10mb",
-    },
-  },
-};
-
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -46,9 +37,7 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: "Número do Ticket/Chamado é obrigatório para exportação." });
     }
 
-    const cleanId = String(ticket).replace(/^[#\s]+/, "").trim();
-    const numVal = Number(cleanId);
-    const isValidInt32 = !isNaN(numVal) && numVal > 0 && numVal <= 2147483647 && Number.isInteger(numVal);
+    const cleanId = String(ticket).trim();
     const headers = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
       "Accept": "application/json",
@@ -57,59 +46,38 @@ export default async function handler(req: any, res: any) {
 
     let targetNumericId: number | null = null;
 
-    // 1. Try protocol lookup first
+    // 1. Try direct ID lookup first
     try {
-      const protocolUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+      const directUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
         token
-      )}&$filter=${encodeURIComponent(`protocol eq '${cleanId}'`)}`;
+      )}&id=${encodeURIComponent(cleanId)}`;
 
-      const protocolRes = await fetch(protocolUrl, { headers: { Accept: "application/json" } });
-      if (protocolRes.ok) {
-        const protocolData = await protocolRes.json();
-        if (Array.isArray(protocolData) && protocolData.length > 0 && protocolData[0].id) {
-          targetNumericId = protocolData[0].id;
+      const directRes = await fetch(directUrl, { headers: { Accept: "application/json" } });
+      if (directRes.ok) {
+        const directData = await directRes.json();
+        const candidate = Array.isArray(directData) ? directData[0] : directData;
+        if (candidate && candidate.id) {
+          targetNumericId = candidate.id;
         }
       }
     } catch (err) {
-      console.warn("Protocol ticket lookup failed in api/movidesk/export.ts:", err);
+      console.warn("Direct ticket lookup failed in api/movidesk/export.ts:", err);
     }
 
-    // 2. Try ID filter lookup if not found
-    if (!targetNumericId && isValidInt32) {
-      try {
-        const idFilterUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-          token
-        )}&$filter=${encodeURIComponent(`id eq ${cleanId}`)}`;
+    // 2. Fallback to filter lookup by protocol or id
+    if (!targetNumericId) {
+      const isNum = !isNaN(Number(cleanId));
+      const filterExpr = isNum ? `protocol eq '${cleanId}' or id eq ${cleanId}` : `protocol eq '${cleanId}'`;
+      const filterUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+        token
+      )}&$filter=${encodeURIComponent(filterExpr)}`;
 
-        const idRes = await fetch(idFilterUrl, { headers: { Accept: "application/json" } });
-        if (idRes.ok) {
-          const idData = await idRes.json();
-          if (Array.isArray(idData) && idData.length > 0 && idData[0].id) {
-            targetNumericId = idData[0].id;
-          }
+      const filterRes = await fetch(filterUrl, { headers: { Accept: "application/json" } });
+      if (filterRes.ok) {
+        const filterData = await filterRes.json();
+        if (Array.isArray(filterData) && filterData.length > 0 && filterData[0].id) {
+          targetNumericId = filterData[0].id;
         }
-      } catch (err) {
-        console.warn("ID filter ticket lookup failed in api/movidesk/export.ts:", err);
-      }
-    }
-
-    // 3. Try direct ID param lookup
-    if (!targetNumericId && isValidInt32) {
-      try {
-        const directUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-          token
-        )}&id=${encodeURIComponent(cleanId)}`;
-
-        const directRes = await fetch(directUrl, { headers: { Accept: "application/json" } });
-        if (directRes.ok) {
-          const directData = await directRes.json();
-          const candidate = Array.isArray(directData) ? directData[0] : directData;
-          if (candidate && candidate.id) {
-            targetNumericId = candidate.id;
-          }
-        }
-      } catch (err) {
-        console.warn("Direct ticket lookup failed in api/movidesk/export.ts:", err);
       }
     }
 

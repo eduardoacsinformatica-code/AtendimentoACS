@@ -82,9 +82,66 @@ export const TIPO_ATENDIMENTO_LABELS: Record<string, string> = {
 };
 
 /**
- * Builds the formatted WhatsApp message text
+ * Builds the Movidesk-style WhatsApp message text (clean ticket appointment format)
  */
-export function buildWhatsAppMessage(data: ReportData, settings?: TechSettings): string {
+export function buildMovideskWhatsAppMessage(data: ReportData, settings?: TechSettings): string {
+  const tecnicoNome = data.tecnico || settings?.defaultTecnico || 'Não informado';
+  const acompanhanteNome = data.acompanhado || 'Não informado';
+  const descricaoText = data.descricaoChamado || 'Informação';
+  const fatoText = data.fato || 'Sem registro.';
+  const diagnosticoText = data.diagnostico || 'Sem registro.';
+  const obsText = data.observacoes || 'Sem registro.';
+
+  let msg = `📋 *LAUDO DE ATENDIMENTO TÉCNICO DE CAMPO*\n`;
+  msg += `Técnico Responsável: ${tecnicoNome}\n`;
+  if (data.ticket) msg += `Ticket: #${data.ticket}\n`;
+  if (data.cliente) msg += `Cliente: ${data.cliente}\n`;
+  msg += `\n`;
+
+  msg += `🥷 *Responsável no Cliente (Acompanhante):*\n`;
+  msg += `${acompanhanteNome}\n\n`;
+
+  msg += `📋 *Descrição do Chamado / Atendimento:*\n`;
+  msg += `${descricaoText}\n\n`;
+
+  msg += `🔍 *Fato Constatado:*\n`;
+  msg += `${fatoText}\n\n`;
+
+  msg += `🛠️ *Diagnóstico e Ações Realizadas:*\n`;
+  msg += `${diagnosticoText}\n\n`;
+
+  msg += `📝 *Observações e Recomendações:*\n`;
+  msg += `${obsText}\n\n`;
+
+  if (data.fotos && data.fotos.length > 0) {
+    msg += `📸 *Fotos e Evidências (${data.fotos.length}):*\n`;
+    data.fotos.forEach((_, index) => {
+      msg += `Evidência #${index + 1}\n`;
+    });
+    msg += `\n`;
+  }
+
+  if (data.assinaturaCliente) {
+    const assinante = data.acompanhado || data.cliente || 'Responsável';
+    msg += `✍️ *Assinatura Digital do Cliente:*\n`;
+    msg += `Coletada digitalmente no local por ${assinante}\n`;
+  }
+
+  return msg.trim();
+}
+
+/**
+ * Builds the formatted WhatsApp message text based on requested format style
+ */
+export function buildWhatsAppMessage(
+  data: ReportData,
+  settings?: TechSettings,
+  formatStyle: 'atual' | 'movidesk' = 'atual'
+): string {
+  if (formatStyle === 'movidesk') {
+    return buildMovideskWhatsAppMessage(data, settings);
+  }
+
   const dataFormatada = formatDateToPtBr(data.data);
   const statusInfo = STATUS_LABELS[data.status] || { label: data.status, icon: '📋' };
   const tipoLabel = TIPO_ATENDIMENTO_LABELS[data.tipoAtendimento] || data.tipoAtendimento;

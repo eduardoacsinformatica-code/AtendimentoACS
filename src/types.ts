@@ -48,7 +48,7 @@ export interface TechSettings {
   defaultTecnico: string;
   defaultEmpresa: string;
   autoFormatCnpj: boolean;
-  whatsappFormatStyle: 'detalhado';
+  whatsappFormatStyle: 'atual' | 'movidesk';
   movideskToken?: string;
   movideskDomain?: string;
 }

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ReportData, TechSettings } from '../types';
 import { shareReportToWhatsApp, ShareResult } from '../utils/whatsapp';
+import { buildWhatsAppMessage } from '../utils/formatters';
+import { MovideskLaudoCard } from './MovideskLaudoCard';
+import { generateElementBlob, downloadElementImage, copyElementImageToClipboard } from '../utils/imageExport';
 import { 
   Send, 
   X, 
@@ -13,7 +16,12 @@ import {
   MessageSquare,
   Sparkles,
   ClipboardCheck,
-  Loader2
+  Loader2,
+  FileText,
+  Copy,
+  Check,
+  Download,
+  Image as ImageIcon
 } from 'lucide-react';
 
 interface WhatsAppShareModalProps {
@@ -41,8 +49,15 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
     reportData.whatsappDestinatario || ''
   );
 
+  const [formatStyle, setFormatStyle] = useState<'atual' | 'movidesk'>(
+    settings?.whatsappFormatStyle === 'movidesk' ? 'movidesk' : 'atual'
+  );
+
   const [isSending, setIsSending] = useState(false);
   const [shareResult, setShareResult] = useState<ShareResult | null>(null);
+  const [copiedTextSuccess, setCopiedTextSuccess] = useState(false);
+  const [copiedImageSuccess, setCopiedImageSuccess] = useState(false);
+  const [showTextPreview, setShowTextPreview] = useState(false);
 
   useEffect(() => {
     setPhoneNumber(reportData.whatsappDestinatario || '');
@@ -51,20 +66,80 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
         ? 'number'
         : 'picker'
     );
+    setFormatStyle(settings?.whatsappFormatStyle === 'movidesk' ? 'movidesk' : 'atual');
     setShareResult(null);
-  }, [reportData]);
+  }, [reportData, settings]);
+
+  const previewMessage = buildWhatsAppMessage(reportData, settings, formatStyle);
+
+  const handleCopyText = async () => {
+    try {
+      await navigator.clipboard.writeText(previewMessage);
+      setCopiedTextSuccess(true);
+      setTimeout(() => setCopiedTextSuccess(false), 2000);
+    } catch (e) {
+      console.error('Erro ao copiar texto:', e);
+    }
+  };
+
+  const handleCopyCardImage = async () => {
+    const success = await copyElementImageToClipboard('movidesk-laudo-card-modal');
+    if (success) {
+      setCopiedImageSuccess(true);
+      setTimeout(() => setCopiedImageSuccess(false), 2500);
+    }
+  };
+
+  const handleDownloadCardImage = async () => {
+    await downloadElementImage('movidesk-laudo-card-modal', `Laudo_Movidesk_${reportData.ticket || 'chamado'}.png`);
+  };
 
   const handleSend = async () => {
     setIsSending(true);
     setShareResult(null);
 
+    // Pre-open popup synchronously during click event handler to bypass browser popup blockers
+    let targetWindow: Window | null = null;
+    try {
+      targetWindow = window.open('about:blank', '_blank');
+      if (targetWindow) {
+        targetWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head><title>Abrindo WhatsApp...</title></head>
+            <body style="font-family: system-ui, -apple-system, sans-serif; background: #0b141a; color: #e9edef; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;">
+              <div style="text-align: center; max-width: 400px; background: #111b21; padding: 30px; border-radius: 16px; border: 1px solid #222d34; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+                <div style="font-size: 32px; margin-bottom: 12px;">💬</div>
+                <p style="font-size: 16px; font-weight: 700; margin: 0 0 8px 0; color: #25d366;">Gerando Laudo do Atendimento...</p>
+                <p style="font-size: 13px; color: #8696a0; margin: 0; line-height: 1.5;">Aguarde alguns segundos. A conversa no WhatsApp será aberta automaticamente.</p>
+              </div>
+            </body>
+          </html>
+        `);
+      }
+    } catch (e) {
+      console.warn('Não foi possível pré-abrir janela:', e);
+    }
+
     const targetPhone = sendMode === 'number' ? phoneNumber : '';
 
     try {
-      const result = await shareReportToWhatsApp(reportData, settings, targetPhone);
+      let cardBlob: Blob | null = null;
+      if (formatStyle === 'movidesk') {
+        cardBlob = await generateElementBlob('movidesk-laudo-card-modal');
+      }
+
+      const result = await shareReportToWhatsApp(
+        reportData, 
+        settings, 
+        targetPhone, 
+        formatStyle, 
+        cardBlob, 
+        targetWindow
+      );
+
       setShareResult(result);
       if (result.success) {
-        // Automatically close modal after brief delay if web-share was triggered, or keep feedback on screen
         if (result.method === 'web-share') {
           setTimeout(() => {
             onClose();
@@ -73,6 +148,11 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
       }
     } catch (err) {
       console.error('Erro ao compartilhar no WhatsApp:', err);
+      if (targetWindow && !targetWindow.closed) {
+        try {
+          targetWindow.close();
+        } catch (e) {}
+      }
     } finally {
       setIsSending(false);
     }
@@ -82,7 +162,7 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm p-4 flex items-center justify-center overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-5 text-slate-100 animate-in fade-in zoom-in-95 duration-150">
+      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-5 text-slate-100 animate-in fade-in zoom-in-95 duration-150 my-auto max-h-[92vh] overflow-y-auto">
         
         {/* Close Button */}
         <button
@@ -108,10 +188,148 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
           </div>
         </div>
 
-        {/* Recipient Selection Section */}
+        {/* Format Selector Section */}
         <div className="space-y-3">
           <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-            1. Destinatário da Mensagem
+            1. Escolha o Estilo de Envio
+          </label>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {/* Option A: Formato Texto Atual */}
+            <button
+              type="button"
+              onClick={() => setFormatStyle('atual')}
+              className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between space-y-1 ${
+                formatStyle === 'atual'
+                  ? 'bg-emerald-950/50 border-emerald-500 text-emerald-200 ring-1 ring-emerald-500/50'
+                  : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-emerald-400 flex items-center">
+                  🛠️ Formato Texto Atual
+                </span>
+                <span className={`w-3 h-3 rounded-full border ${formatStyle === 'atual' ? 'bg-emerald-500 border-emerald-400' : 'border-slate-600'}`} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-200">Mensagem Formatada em Texto</p>
+                <p className="text-[10px] text-slate-400">Texto padrão com marcadores, fatos e fotos em anexo</p>
+              </div>
+            </button>
+
+            {/* Option B: Estilo Movidesk (Imagem) */}
+            <button
+              type="button"
+              onClick={() => setFormatStyle('movidesk')}
+              className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between space-y-1 ${
+                formatStyle === 'movidesk'
+                  ? 'bg-emerald-950/50 border-emerald-500 text-emerald-200 ring-1 ring-emerald-500/50'
+                  : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-sky-400 flex items-center">
+                  🖼️ Imagem Estilo Movidesk
+                </span>
+                <span className={`w-3 h-3 rounded-full border ${formatStyle === 'movidesk' ? 'bg-emerald-500 border-emerald-400' : 'border-slate-600'}`} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-200">Laudo Técnico em Imagem</p>
+                <p className="text-[10px] text-slate-400">Card gráfico completo com cabeçalho azul, fotos e assinatura</p>
+              </div>
+            </button>
+          </div>
+
+          {/* Movidesk Image Card Preview & Quick Controls */}
+          {formatStyle === 'movidesk' ? (
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-sky-300 flex items-center">
+                  <ImageIcon className="w-3.5 h-3.5 mr-1 text-sky-400" />
+                  Prévia da Imagem do Laudo:
+                </span>
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyCardImage}
+                    className="text-[11px] text-slate-200 hover:text-white font-medium flex items-center bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded-lg border border-slate-700 transition-colors"
+                  >
+                    {copiedImageSuccess ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 mr-1 text-emerald-400" />
+                        Imagem Copiada!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 mr-1 text-sky-400" />
+                        Copiar Imagem
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadCardImage}
+                    className="text-[11px] text-slate-200 hover:text-white font-medium flex items-center bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded-lg border border-slate-700 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5 mr-1 text-emerald-400" />
+                    Baixar (.png)
+                  </button>
+                </div>
+              </div>
+
+              {/* Movidesk Visual Card Wrapper */}
+              <div className="max-h-80 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-2 shadow-inner">
+                <MovideskLaudoCard
+                  id="movidesk-laudo-card-modal"
+                  data={reportData}
+                  settings={settings}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => setShowTextPreview(!showTextPreview)}
+                className="text-[11px] text-emerald-400 hover:underline font-medium flex items-center"
+              >
+                <FileText className="w-3.5 h-3.5 mr-1" />
+                {showTextPreview ? 'Ocultar Prévia do Texto' : 'Ver Prévia do Texto'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopyText}
+                className="text-[11px] text-slate-300 hover:text-white font-medium flex items-center bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700 transition-colors"
+              >
+                {copiedTextSuccess ? (
+                  <>
+                    <Check className="w-3 h-3 mr-1 text-emerald-400" />
+                    Texto Copiado!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3 mr-1 text-slate-400" />
+                    Copiar Texto
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Text Box Preview if toggled */}
+          {showTextPreview && formatStyle === 'atual' && (
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-[11px] font-mono text-slate-300 whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed">
+              {previewMessage}
+            </div>
+          )}
+        </div>
+
+        {/* Recipient Selection Section */}
+        <div className="space-y-3 pt-2 border-t border-slate-800">
+          <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+            2. Destinatário da Mensagem
           </label>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -151,120 +369,29 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
               </div>
               <div>
                 <p className="text-xs font-bold text-slate-200">Número Específico</p>
-                <p className="text-[10px] text-slate-400">Digitar telefone com DDD</p>
+                <p className="text-[10px] text-slate-400">Inicia conversa diretamente com o número</p>
               </div>
             </button>
           </div>
 
-          {/* Number Input Field if 'number' mode selected */}
+          {/* Number Input Field */}
           {sendMode === 'number' && (
-            <div className="pt-1">
+            <div className="space-y-1.5 pt-1 animate-in fade-in duration-150">
               <div className="relative">
-                <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
                 <input
                   type="text"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="(11) 98765-4321"
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 text-white text-xs rounded-xl pl-9 pr-3 py-2 outline-none"
+                  placeholder="Ex: 11999998888 ou 47999998888"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 text-white rounded-xl py-2.5 pl-9 pr-3 text-xs placeholder:text-slate-600 focus:outline-hidden font-mono"
                 />
+                <Smartphone className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
               </div>
-              <p className="text-[10px] text-slate-500 mt-1">
-                Insira o número com DDD (exemplo: 11987654321)
+              <p className="text-[10px] text-slate-400 flex items-center pl-1">
+                <Info className="w-3 h-3 text-emerald-400 mr-1 shrink-0" />
+                Digite o número com DDD. O código do país (+55) será incluído automaticamente.
               </p>
             </div>
-          )}
-        </div>
-
-        {/* Photos & Evidences Info Banner */}
-        <div className="space-y-2 pt-2 border-t border-slate-800">
-          <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
-            <span className="flex items-center">
-              <Camera className="w-4 h-4 text-emerald-400 mr-1.5" />
-              2. Evidências Fotográficas ({reportData.fotos?.length || 0})
-            </span>
-            {hasPhotos && (
-              <span className="text-[10px] bg-emerald-950 text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-800/60">
-                Inclusas no envio
-              </span>
-            )}
-          </label>
-
-          {hasPhotos ? (
-            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-2">
-              {/* Photo Thumbnails */}
-              <div className="flex items-center space-x-2 overflow-x-auto pb-1">
-                {reportData.fotos?.map((photo, idx) => (
-                  <div key={idx} className="w-12 h-12 rounded-lg border border-slate-700 overflow-hidden shrink-0 bg-slate-900 relative">
-                    <img src={photo} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
-                    <span className="absolute bottom-0 right-0 bg-slate-950/90 text-white text-[8px] font-mono px-1">
-                      #{idx + 1}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Explanatory Box */}
-              <div className="bg-emerald-950/40 border border-emerald-800/50 rounded-lg p-2.5 text-[11px] text-emerald-200 space-y-1">
-                <p className="font-semibold flex items-center text-emerald-300">
-                  <Sparkles className="w-3.5 h-3.5 mr-1 text-emerald-400 shrink-0" />
-                  Como as imagens são enviadas:
-                </p>
-                <ul className="list-disc list-inside space-y-0.5 text-slate-300 text-[10px]">
-                  <li>
-                    <strong className="text-white">No Celular:</strong> O WhatsApp abre diretamente com fotos, assinatura e mensagem integradas.
-                  </li>
-                  <li>
-                    <strong className="text-white">No Computador (WhatsApp Web):</strong> A imagem principal (assinatura/foto) é copiada. Pressione <kbd className="px-1 py-0.5 bg-slate-800 text-emerald-300 rounded border border-slate-700 font-mono text-[9px]">Ctrl + V</kbd> no WhatsApp para colar!
-                  </li>
-                </ul>
-              </div>
-            </div>
-          ) : (
-            <p className="text-[11px] text-slate-500 bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
-              Nenhuma foto de evidência anexada a este laudo.
-            </p>
-          )}
-        </div>
-
-        {/* Client Digital Signature Banner */}
-        <div className="space-y-2 pt-2 border-t border-slate-800">
-          <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
-            <span className="flex items-center">
-              <Sparkles className="w-4 h-4 text-emerald-400 mr-1.5" />
-              3. Assinatura Digital do Cliente
-            </span>
-            {reportData.assinaturaCliente ? (
-              <span className="text-[10px] bg-emerald-950 text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-800/60 flex items-center">
-                <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-400" />
-                Anexo da Imagem da Assinatura Incluso
-              </span>
-            ) : (
-              <span className="text-[10px] text-slate-500 font-normal">Não assinada</span>
-            )}
-          </label>
-
-          {reportData.assinaturaCliente ? (
-            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-2">
-              <div className="flex items-center space-x-3">
-                <div className="w-20 h-12 bg-slate-900 rounded-lg border border-slate-700 p-1 flex items-center justify-center shrink-0">
-                  <img src={reportData.assinaturaCliente} alt="Assinatura" className="max-h-full max-w-full object-contain" />
-                </div>
-                <div className="text-xs">
-                  <p className="font-semibold text-white">Imagem da Assinatura Anexada</p>
-                  <p className="text-[10px] text-slate-400">
-                    Responsável: {reportData.acompanhado || reportData.cliente || 'Cliente'}
-                  </p>
-                  <p className="text-[10px] text-emerald-400 mt-0.5">
-                    A imagem da assinatura será enviada no WhatsApp como anexo.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-[11px] text-slate-500 bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
-              Este laudo não possui assinatura digital coletada.
-            </p>
           )}
         </div>
 
@@ -286,7 +413,7 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
               <p className="font-bold">{shareResult.message}</p>
               {shareResult.copiedPhoto && (
                 <p className="text-[10px] text-emerald-300/80">
-                  💡 Pressione <span className="font-bold underline">Ctrl + V</span> (ou Colar) no WhatsApp para incluir a foto!
+                  💡 Pressione <span className="font-bold underline">Ctrl + V</span> (ou Colar) no WhatsApp para incluir a imagem!
                 </p>
               )}
             </div>
@@ -312,12 +439,12 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
             {isSending ? (
               <>
                 <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-                Iniciando...
+                Gerando Imagem...
               </>
             ) : (
               <>
                 <Send className="w-4 h-4 mr-1.5" />
-                Abrir WhatsApp e Enviar
+                {formatStyle === 'movidesk' ? 'Enviar Imagem no WhatsApp' : 'Abrir WhatsApp e Enviar'}
               </>
             )}
           </button>

@@ -50,9 +50,12 @@ export interface ShareResult {
 export async function shareReportToWhatsApp(
   data: ReportData,
   settings?: TechSettings,
-  overridePhone?: string
+  overridePhone?: string,
+  formatStyle: 'atual' | 'movidesk' = 'atual',
+  cardImageBlob?: Blob | null,
+  targetWindow?: Window | null
 ): Promise<ShareResult> {
-  const messageText = buildWhatsAppMessage(data, settings);
+  const messageText = buildWhatsAppMessage(data, settings, formatStyle);
   const phoneToUse = overridePhone !== undefined ? overridePhone : (data.whatsappDestinatario || '');
   
   let cleanPhone = phoneToUse.replace(/\D/g, '');
@@ -60,11 +63,96 @@ export async function shareReportToWhatsApp(
     cleanPhone = '55' + cleanPhone;
   }
 
+  const encodedText = encodeURIComponent(messageText);
+  const whatsappUrl = cleanPhone
+    ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`
+    : `https://api.whatsapp.com/send?text=${encodedText}`;
+
+  const openWhatsApp = () => {
+    if (targetWindow && !targetWindow.closed) {
+      targetWindow.location.href = whatsappUrl;
+    } else {
+      const win = window.open(whatsappUrl, '_blank');
+      if (!win) {
+        window.location.href = whatsappUrl;
+      }
+    }
+  };
+
+  const closeTargetWindow = () => {
+    if (targetWindow && !targetWindow.closed) {
+      try {
+        targetWindow.close();
+      } catch (e) {
+        console.warn('Could not close target window:', e);
+      }
+    }
+  };
+
   const hasPhotos = data.fotos && data.fotos.length > 0;
   const hasSignature = !!(data.assinaturaCliente && data.assinaturaCliente.trim().length > 0);
 
-  // 1. Try Native Web Share API Level 2 (Supported on Mobile Browsers & native share)
+  // 1. If formatStyle is 'movidesk' and cardImageBlob exists, prioritize sharing the Movidesk Card image
+  if (formatStyle === 'movidesk' && cardImageBlob) {
+    const cardFile = new File([cardImageBlob], `Laudo_Movidesk_${data.ticket || 'chamado'}.png`, { type: 'image/png' });
+
+    let sharedViaWebShare = false;
+    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare({ files: [cardFile] })) {
+      try {
+        await navigator.share({
+          title: `Laudo Técnico #${data.ticket || 'S/N'} - ${data.cliente || ''}`,
+          text: messageText,
+          files: [cardFile],
+        });
+        sharedViaWebShare = true;
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          closeTargetWindow();
+          return { success: false, method: 'cancelled', message: 'Compartilhamento cancelado.' };
+        }
+        console.warn('Web Share de imagem falhou. Usando fallback de cópia e redirecionamento:', err);
+      }
+    }
+
+    if (sharedViaWebShare) {
+      closeTargetWindow();
+      return {
+        success: true,
+        method: 'web-share',
+        message: 'Imagem do Laudo Movidesk compartilhada com sucesso no WhatsApp!',
+      };
+    }
+
+    // Fallback: Copy image to Clipboard & open WhatsApp
+    let copiedImageSuccess = false;
+    if (typeof navigator !== 'undefined' && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            ['image/png']: cardImageBlob,
+          }),
+        ]);
+        copiedImageSuccess = true;
+      } catch (clipErr) {
+        console.warn('Falha ao copiar imagem do laudo para a área de transferência:', clipErr);
+      }
+    }
+
+    openWhatsApp();
+
+    return {
+      success: true,
+      method: 'clipboard-and-url',
+      copiedPhoto: copiedImageSuccess,
+      message: copiedImageSuccess
+        ? 'WhatsApp aberto! A imagem do Laudo (Estilo Movidesk) foi copiada. Pressione Ctrl+V para colar a imagem na conversa do WhatsApp!'
+        : 'WhatsApp aberto com o texto do Laudo Movidesk!',
+    };
+  }
+
+  // Standard sharing logic (Format 'atual' or fallback)
   if ((hasPhotos || hasSignature) && typeof navigator !== 'undefined' && navigator.share) {
+    let sharedViaWebShare = false;
     try {
       const filesToShare: File[] = [];
 
@@ -91,26 +179,31 @@ export async function shareReportToWhatsApp(
           text: messageText,
           files: filesToShare,
         });
-        return {
-          success: true,
-          method: 'web-share',
-          message: hasSignature && hasPhotos
-            ? 'Relatório, fotos e imagem da assinatura compartilhados no WhatsApp!'
-            : hasSignature
-            ? 'Relatório e imagem da assinatura compartilhados no WhatsApp!'
-            : 'Relatório e foto(s) de evidência compartilhados no WhatsApp!',
-        };
+        sharedViaWebShare = true;
       }
     } catch (err: any) {
       if (err.name === 'AbortError') {
+        closeTargetWindow();
         return { success: false, method: 'cancelled', message: 'Compartilhamento cancelado.' };
       }
       console.warn('Web Share com arquivos não suportado ou falhou. Usando fallback:', err);
     }
+
+    if (sharedViaWebShare) {
+      closeTargetWindow();
+      return {
+        success: true,
+        method: 'web-share',
+        message: hasSignature && hasPhotos
+          ? 'Relatório, fotos e imagem da assinatura compartilhados no WhatsApp!'
+          : hasSignature
+          ? 'Relatório e imagem da assinatura compartilhados no WhatsApp!'
+          : 'Relatório e foto(s) de evidência compartilhados no WhatsApp!',
+      };
+    }
   }
 
   // 2. Fallback for Desktop or browsers without Web Share file support:
-  // Copy signature or evidence photo to clipboard so user can press Ctrl+V in WhatsApp Web
   let copiedPhotoSuccess = false;
   if ((hasPhotos || hasSignature) && typeof navigator !== 'undefined' && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
     try {
@@ -127,17 +220,7 @@ export async function shareReportToWhatsApp(
     }
   }
 
-  // 3. Open WhatsApp Web or Mobile App link
-  const encodedText = encodeURIComponent(messageText);
-  let whatsappUrl = '';
-
-  if (cleanPhone) {
-    whatsappUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`;
-  } else {
-    whatsappUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
-  }
-
-  window.open(whatsappUrl, '_blank');
+  openWhatsApp();
 
   return {
     success: true,

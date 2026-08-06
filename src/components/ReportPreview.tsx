@@ -7,6 +7,7 @@ import {
   formatDateToPtBr 
 } from '../utils/formatters';
 import { WhatsAppShareModal } from './WhatsAppShareModal';
+import { MovideskLaudoCard } from './MovideskLaudoCard';
 import { 
   Copy, 
   Send, 
@@ -30,10 +31,13 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
   settings,
 }) => {
   const [viewMode, setViewMode] = useState<'whatsapp' | 'document'>('whatsapp');
+  const [formatStyle, setFormatStyle] = useState<'atual' | 'movidesk'>(
+    settings.whatsappFormatStyle === 'movidesk' ? 'movidesk' : 'atual'
+  );
   const [copiedSuccess, setCopiedSuccess] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
-  const formattedWhatsAppText = buildWhatsAppMessage(formData, settings);
+  const formattedWhatsAppText = buildWhatsAppMessage(formData, settings, formatStyle);
 
   const handleCopyText = async () => {
     try {
@@ -113,23 +117,62 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
         {viewMode === 'whatsapp' && (
           <div className="bg-[#0b141a] border border-[#1f2c34] rounded-2xl p-4 font-sans text-sm shadow-inner relative overflow-hidden min-h-[380px]">
             
-            {/* WhatsApp Header Mockup */}
-            <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#1f2c34] text-slate-400 text-xs">
+            {/* WhatsApp Header Mockup & Style Switcher */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-3 border-b border-[#1f2c34] text-slate-400 text-xs gap-2">
               <div className="flex items-center space-x-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="font-semibold text-slate-300">
-                  Formatação para WhatsApp Chat
+                  Formatação WhatsApp
                 </span>
               </div>
-              <span className="text-[11px] text-slate-500 font-mono">
-                {formData.whatsappDestinatario ? formData.whatsappDestinatario : 'Destinatário'}
-              </span>
+              <div className="flex items-center space-x-1 bg-slate-900/90 p-1 rounded-lg border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setFormatStyle('atual')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    formatStyle === 'atual'
+                      ? 'bg-emerald-600 text-white font-bold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Formato Atual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormatStyle('movidesk')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    formatStyle === 'movidesk'
+                      ? 'bg-emerald-600 text-white font-bold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Estilo Movidesk
+                </button>
+              </div>
             </div>
 
-            {/* Chat Bubble */}
-            <div className="bg-[#005c4b]/30 border border-[#005c4b]/50 rounded-2xl rounded-tr-none p-4 text-emerald-50 max-w-full font-mono text-xs whitespace-pre-wrap leading-relaxed shadow-lg">
-              {formattedWhatsAppText}
-            </div>
+            {/* Chat Bubble or Movidesk Card */}
+            {formatStyle === 'movidesk' ? (
+              <div className="space-y-4">
+                <MovideskLaudoCard
+                  id="movidesk-laudo-card-preview"
+                  data={formData}
+                  settings={settings}
+                />
+
+                {/* WhatsApp Text Preview below Card */}
+                <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-1">
+                  <p className="text-[11px] font-bold text-slate-400">Texto formatado para o WhatsApp:</p>
+                  <div className="font-mono text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-36 overflow-y-auto">
+                    {formattedWhatsAppText}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-[#005c4b]/30 border border-[#005c4b]/50 rounded-2xl rounded-tr-none p-4 text-emerald-50 max-w-full font-mono text-xs whitespace-pre-wrap leading-relaxed shadow-lg">
+                {formattedWhatsAppText}
+              </div>
+            )}
 
             <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
               <span>*Texto formatado para o aplicativo*</span>

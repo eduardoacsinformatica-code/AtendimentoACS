@@ -129,6 +129,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </p>
           </div>
 
+          {/* Default WhatsApp Format Style */}
+          <div className="pt-2 border-t border-slate-800 space-y-2">
+            <div>
+              <span className="text-xs font-semibold text-slate-200 block">
+                Estilo Padrão do WhatsApp
+              </span>
+              <p className="text-[11px] text-slate-400">
+                Escolha o formato pré-selecionado ao abrir a janela de envio
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, whatsappFormatStyle: 'atual' })}
+                className={`p-2.5 rounded-xl border text-left transition-all ${
+                  formData.whatsappFormatStyle === 'atual'
+                    ? 'bg-emerald-950/70 border-emerald-500 text-emerald-200 font-semibold'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="text-xs">🛠️ Formato Atual</div>
+                <div className="text-[10px] text-slate-400 font-normal">Com moldura e emojis</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, whatsappFormatStyle: 'movidesk' })}
+                className={`p-2.5 rounded-xl border text-left transition-all ${
+                  formData.whatsappFormatStyle === 'movidesk'
+                    ? 'bg-emerald-950/70 border-emerald-500 text-emerald-200 font-semibold'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="text-xs">📋 Estilo Movidesk</div>
+                <div className="text-[10px] text-slate-400 font-normal">Padrão de chamado</div>
+              </button>
+            </div>
+          </div>
 
           {/* Auto Format CNPJ Toggle */}
           <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
