@@ -277,8 +277,8 @@ export default async function handler(req: any, res: any) {
 
     const wantsEmail = Boolean(enviarEmailCliente && String(emailCliente || '').trim());
     const useDirectEmail = wantsEmail && smtpConfigured();
-    if (wantsEmail && !useDirectEmail) payload.tags = Array.from(new Set([...currentTags, EMAIL_TRIGGER_TAG]));
 
+    // IMPORTANTE: não adiciona a tag de e-mail ainda. Primeiro cria a ação e anexa o PDF.
     let update = await movideskRequest({ id: targetId }, { method: 'PATCH', body: JSON.stringify(payload) });
     let statusUpdated = Boolean(payload.status);
     if (!update.ok && payload.status) {
@@ -314,6 +314,19 @@ export default async function handler(req: any, res: any) {
         await sendPdfEmail(String(emailCliente).trim(), cleanId, String(body.cliente || ''), pdfBytes, fileName);
         emailSent = true;
       } else {
+        // Só dispara o gatilho do Movidesk DEPOIS que o PDF está anexado à última ação.
+        const emailTags = Array.from(new Set([...currentTags.filter((tag: string) => tag.toUpperCase() !== EMAIL_TRIGGER_TAG), EMAIL_TRIGGER_TAG]));
+        const tagUpdate = await movideskRequest({ id: targetId }, {
+          method: 'PATCH',
+          body: JSON.stringify({ tags: emailTags }),
+        });
+        if (!tagUpdate.ok) {
+          const details = (await tagUpdate.text().catch(() => '')).slice(0, 700);
+          return res.status(502).json({
+            error: `O PDF foi anexado, mas não foi possível disparar o gatilho de e-mail do Movidesk (status ${tagUpdate.status}).`,
+            details,
+          });
+        }
         emailQueued = true;
       }
     }
@@ -329,10 +342,11 @@ export default async function handler(req: any, res: any) {
       emailSent,
       emailQueued,
       smtpConfigured: smtpConfigured(),
+      emailPlaceholder: emailQueued ? '{ticket.lastaction.attachements}' : '',
       message: emailSent
         ? `Laudo enviado ao Movidesk e PDF enviado por e-mail para ${String(emailCliente).trim()}.`
         : emailQueued
-          ? `Laudo e PDF anexados ao Movidesk. O e-mail foi solicitado pelo gatilho, mas o envio com PDF exige SMTP configurado na Vercel.`
+          ? `Laudo e PDF anexados ao Movidesk. Gatilho de e-mail disparado após o upload do PDF.`
           : `Laudo e PDF anexados ao chamado #${cleanId}.`,
     });
   } catch (error: any) {
