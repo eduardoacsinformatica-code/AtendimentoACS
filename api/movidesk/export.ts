@@ -1,3 +1,5 @@
+const EMAIL_TRIGGER_TAG = 'ACS_ENVIAR_LAUDO_EMAIL';
+
 function getToken(): string {
   const token = process.env.MOVIDESK_API_TOKEN?.trim();
   if (!token) throw new Error('MOVIDESK_API_TOKEN não configurado na Vercel.');
@@ -77,6 +79,7 @@ function buildVisualReport(body: any, cleanId: string): string {
     assinaturaCliente,
     incluirAssinatura,
     empresaAssinatura,
+    emailCliente,
   } = body;
 
   const fotoList = Array.isArray(fotos) ? fotos.filter((foto: unknown) => typeof foto === 'string' && foto) : [];
@@ -133,6 +136,7 @@ function buildVisualReport(body: any, cleanId: string): string {
           <td style="padding:2px 12px 2px 0;color:#94a3b8;">Data: <strong style="color:#f8fafc;">${formatDateBr(data)}</strong></td>
           <td style="padding:2px 0;color:#94a3b8;">Tipo: <strong style="color:#f8fafc;">${escapeHtml(tipo)}</strong></td>
         </tr>
+        ${emailCliente ? `<tr><td colspan="2" style="padding:2px 0;color:#94a3b8;">E-mail do cliente: <strong style="color:#f8fafc;">${escapeHtml(emailCliente)}</strong></td></tr>` : ''}
       </table>
     </div>
 
@@ -160,7 +164,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    const { ticket, status } = body;
+    const { ticket, status, emailCliente, enviarEmailCliente } = body;
 
     getToken();
     if (!ticket) return res.status(400).json({ error: 'Número do chamado é obrigatório.' });
@@ -202,6 +206,17 @@ export default async function handler(req: any, res: any) {
       }],
     };
 
+    let emailQueued = false;
+    if (enviarEmailCliente && String(emailCliente || '').trim()) {
+      const current = await readJson(await movideskRequest({ id: targetId }));
+      const ticketData = Array.isArray(current) ? current[0] : current;
+      const currentTags = Array.isArray(ticketData?.tags)
+        ? ticketData.tags.map((tag: unknown) => String(tag)).filter(Boolean)
+        : [];
+      payload.tags = Array.from(new Set([...currentTags, EMAIL_TRIGGER_TAG]));
+      emailQueued = true;
+    }
+
     const statusMap: Record<string, string> = {
       CONCLUIDO: 'Concluído',
       EM_ANDAMENTO: 'Em atendimento',
@@ -236,15 +251,22 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    const emailInfo = emailQueued
+      ? ` E-mail solicitado para ${String(emailCliente).trim()} via gatilho do Movidesk.`
+      : '';
+
     return res.status(200).json({
       success: true,
       ticket: cleanId,
       movideskId: targetId,
       statusUpdated,
       visualMode: true,
-      message: statusUpdated
+      emailQueued,
+      emailCliente: emailQueued ? String(emailCliente).trim() : '',
+      emailTriggerTag: emailQueued ? EMAIL_TRIGGER_TAG : '',
+      message: (statusUpdated
         ? `Laudo visual enviado e status atualizado no chamado #${cleanId}.`
-        : `Laudo visual enviado ao chamado #${cleanId}.`,
+        : `Laudo visual enviado ao chamado #${cleanId}.`) + emailInfo,
     });
   } catch (error: any) {
     console.error('Erro ao exportar para o Movidesk:', error);
