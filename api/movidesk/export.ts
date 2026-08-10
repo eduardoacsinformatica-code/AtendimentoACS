@@ -1,201 +1,169 @@
-import { ReportData } from "../../src/types";
+function getToken(): string {
+  const token = process.env.MOVIDESK_API_TOKEN?.trim();
+  if (!token) throw new Error('MOVIDESK_API_TOKEN não configurado na Vercel.');
+  return token;
+}
 
-import { validateMovideskPayload } from "../../src/utils/movideskParser";
-import { getMovideskToken, movideskFetch, movideskJson, sendApiError } from "../../src/server_movidesk";
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function movideskRequest(
+  params: Record<string, string | number>,
+  init: RequestInit = {},
+  timeoutMs = 25000,
+): Promise<Response> {
+  const url = new URL('https://api.movidesk.com/public/v1/tickets');
+  url.searchParams.set('token', getToken());
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/json',
+        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(init.headers || {}),
+      },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readJson(response: Response): Promise<any> {
+  const text = await response.text();
+  if (!response.ok) {
+    const safe = text.replace(/token=[^&\s\"]+/gi, 'token=***').slice(0, 1000);
+    const err: any = new Error(`Movidesk respondeu com status ${response.status}.`);
+    err.httpStatus = response.status;
+    err.details = safe;
+    throw err;
+  }
+  if (!text) return null;
+  try { return JSON.parse(text); } catch { return null; }
+}
 
 export default async function handler(req: any, res: any) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Método não permitido. Use POST." });
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Método não permitido. Use POST.' });
   }
 
   try {
-    const body: Partial<ReportData> = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
-    const {
-      ticket,
-      cliente,
-      acompanhado,
-      fato,
-      diagnostico,
-      observacoes,
-      fotos,
-      assinaturaCliente,
-      status,
-      tecnico
-    } = body;
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const { ticket, cliente, acompanhado, fato, diagnostico, observacoes, status, tecnico } = body;
 
-    getMovideskToken();
-
-    if (!ticket) {
-      return res.status(400).json({ error: "Número do Ticket/Chamado é obrigatório para exportação." });
-    }
+    getToken();
+    if (!ticket) return res.status(400).json({ error: 'Número do chamado é obrigatório.' });
 
     const cleanId = String(ticket).trim();
-    const isInt32 = /^\d{1,9}$/.test(cleanId) && Number(cleanId) > 0 && Number(cleanId) <= 2147483647;
-    const headers = {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-      "Accept": "application/json",
-      "Content-Type": "application/json",
-    };
+    const isNumericId = /^\d{1,9}$/.test(cleanId) && Number(cleanId) > 0 && Number(cleanId) <= 2147483647;
+    let targetId: number | null = null;
 
-    let targetNumericId: number | null = null;
-
-    if (isInt32) {
+    if (isNumericId) {
       try {
-        const directData = await movideskJson('tickets', { id: cleanId });
-        const candidate = Array.isArray(directData) ? directData[0] : directData;
-        if (candidate?.id) targetNumericId = Number(candidate.id);
-      } catch (error) {
-        console.warn(`Busca direta do ticket ${cleanId} para exportação falhou; tentando filtro.`, error);
+        const direct = await readJson(await movideskRequest({ id: cleanId, '$select': 'id,protocol' }));
+        const candidate = Array.isArray(direct) ? direct[0] : direct;
+        if (candidate?.id) targetId = Number(candidate.id);
+      } catch (err) {
+        console.warn('Busca por id falhou; tentando protocolo.', err);
       }
     }
 
-    if (!targetNumericId) {
-      const escapedProtocol = cleanId.replace(/'/g, "''");
-      const filterExpr = isInt32
-        ? `protocol eq '${escapedProtocol}' or id eq ${cleanId}`
-        : `protocol eq '${escapedProtocol}'`;
-      const filterData = await movideskJson('tickets', { '$filter': filterExpr, '$top': 1 });
-      if (Array.isArray(filterData) && filterData[0]?.id) {
-        targetNumericId = Number(filterData[0].id);
-      }
+    if (!targetId) {
+      const escaped = cleanId.replace(/'/g, "''");
+      const found = await readJson(await movideskRequest({
+        '$filter': `protocol eq '${escaped}'`,
+        '$select': 'id,protocol',
+        '$top': 1,
+      }));
+      if (Array.isArray(found) && found[0]?.id) targetId = Number(found[0].id);
     }
 
-    if (!targetNumericId) {
-      return res.status(404).json({ error: `Chamado #${cleanId} não foi localizado no Movidesk para atualização.` });
+    if (!targetId) {
+      return res.status(404).json({ error: `Chamado #${cleanId} não foi localizado no Movidesk.` });
     }
 
-    const photosList = Array.isArray(fotos) ? fotos : [];
-    const htmlAction = `
-      <div style="font-family: Arial, sans-serif; font-size: 14px; color: #1e293b; line-height: 1.6; border: 1px solid #cbd5e0; border-radius: 8px; padding: 16px; background-color: #f8fafc; max-width: 700px;">
-        <div style="background-color: #0f172a; color: #ffffff; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px;">
-          <h3 style="margin: 0; font-size: 15px; font-weight: bold; color: #38bdf8;">
-            📋 LAUDO DE ATENDIMENTO TÉCNICO DE CAMPO
-          </h3>
-          ${tecnico ? `<span style="font-size: 12px; color: #94a3b8;">Técnico Responsável: ${tecnico}</span>` : ''}
-        </div>
+    const htmlAction = [
+      '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">',
+      '<h3>📋 LAUDO DE ATENDIMENTO TÉCNICO DE CAMPO</h3>',
+      tecnico ? `<p><strong>Técnico responsável:</strong> ${escapeHtml(tecnico)}</p>` : '',
+      `<p><strong>Cliente:</strong> ${escapeHtml(cliente || 'Não informado')}</p>`,
+      `<p><strong>Responsável no cliente:</strong> ${escapeHtml(acompanhado || 'Não informado')}</p>`,
+      `<p><strong>Fato constatado:</strong><br>${escapeHtml(fato || 'Não informado').replace(/\n/g, '<br>')}</p>`,
+      `<p><strong>Diagnóstico e ações realizadas:</strong><br>${escapeHtml(diagnostico || 'Não informado').replace(/\n/g, '<br>')}</p>`,
+      observacoes ? `<p><strong>Observações:</strong><br>${escapeHtml(observacoes).replace(/\n/g, '<br>')}</p>` : '',
+      '</div>',
+    ].join('');
 
-        <p style="margin-bottom: 12px;">
-          <strong>👤 Responsável no Cliente (Acompanhante):</strong><br/>
-          <span style="color: #0f172a; font-size: 14px; font-weight: 600;">${acompanhado || 'Não informado'}</span>
-        </p>
-
-        <div style="margin-bottom: 14px;">
-          <strong>🔍 Fato Constatado:</strong>
-          <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0; margin-top: 4px; white-space: pre-wrap; font-size: 13px;">${fato || 'Não informado'}</div>
-        </div>
-
-        <div style="margin-bottom: 14px;">
-          <strong>🛠️ Diagnóstico e Ações Realizadas:</strong>
-          <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0; margin-top: 4px; white-space: pre-wrap; font-size: 13px;">${diagnostico || 'Nenhuma ação registrada'}</div>
-        </div>
-
-        ${observacoes ? `
-        <div style="margin-bottom: 14px;">
-          <strong>📝 Observações e Recomendações:</strong>
-          <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0; margin-top: 4px; white-space: pre-wrap; font-size: 13px;">${observacoes}</div>
-        </div>
-        ` : ''}
-
-        ${photosList.length > 0 ? `
-        <div style="margin-bottom: 14px;">
-          <strong>📷 Fotos e Evidências (${photosList.length}):</strong>
-          <div style="margin-top: 8px;">
-            ${photosList.map((foto: string, idx: number) => `
-              <div style="margin-bottom: 10px;">
-                <p style="font-size: 11px; color: #64748b; margin: 0 0 2px 0;">Evidência #${idx + 1}:</p>
-                <img src="${foto}" alt="Evidência ${idx + 1}" style="max-width: 100%; max-height: 350px; border-radius: 6px; border: 1px solid #cbd5e0;" />
-              </div>
-            `).join('')}
-          </div>
-        </div>
-        ` : '<p style="margin-bottom: 14px; font-size: 13px;"><strong>📷 Fotos e Evidências:</strong> Nenhuma foto anexada.</p>'}
-
-        <div style="margin-top: 16px; padding-top: 12px; border-top: 2px dashed #cbd5e0;">
-          <strong>✍️ Assinatura Digital do Cliente:</strong>
-          ${assinaturaCliente ? `
-            <p style="font-size: 12px; color: #475569; margin: 4px 0 8px 0;">Coletada digitalmente no local por <strong>${acompanhado || cliente || 'Cliente'}</strong></p>
-            <div style="background: #ffffff; padding: 8px; display: inline-block; border-radius: 6px; border: 1px solid #cbd5e0;">
-              <img src="${assinaturaCliente}" alt="Assinatura do Cliente" style="max-width: 320px; max-height: 120px; display: block;" />
-            </div>
-          ` : '<span style="color: #64748b; font-style: italic;"> (Não coletada)</span>'}
-        </div>
-      </div>
-    `;
-
-    let patchBody: any = {
-      id: targetNumericId,
-      actions: [
-        {
-          type: 2,
-          actionType: "Public",
-          description: htmlAction,
-          origin: 2,
-        },
-      ],
+    const payload: any = {
+      actions: [{
+        type: 2,
+        description: htmlAction,
+        origin: 2,
+      }],
     };
 
-    let statusAttempted = false;
-    if (status) {
-      const statusMap: Record<string, string> = {
-        'CONCLUIDO': 'Concluído',
-        'EM_ANDAMENTO': 'Em atendimento',
-        'PENDENTE': 'Pendente',
-        'AGUARDANDO_CLIENTE': 'Aguardando cliente',
-        'AGUARDANDO_PECA': 'Aguardando peça',
-      };
-      if (statusMap[status]) {
-        patchBody.status = statusMap[status];
-        statusAttempted = true;
-      }
-    }
+    const statusMap: Record<string, string> = {
+      CONCLUIDO: 'Concluído',
+      EM_ANDAMENTO: 'Em atendimento',
+      PENDENTE: 'Pendente',
+      AGUARDANDO_CLIENTE: 'Aguardando cliente',
+      AGUARDANDO_PECA: 'Aguardando peça',
+    };
+    if (status && statusMap[status]) payload.status = statusMap[status];
 
-    patchBody = validateMovideskPayload(patchBody);
-
-    let updateRes = await movideskFetch('tickets', { id: targetNumericId }, {
-      method: "PATCH",
-      headers,
-      body: JSON.stringify(patchBody),
+    let update = await movideskRequest({ id: targetId }, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
     });
 
-    let statusUpdated = statusAttempted;
-
-    if (!updateRes.ok && patchBody.status) {
-      delete patchBody.status;
+    let statusUpdated = Boolean(payload.status);
+    if (!update.ok && payload.status) {
+      const firstError = await update.text().catch(() => '');
+      console.warn('PATCH com status falhou; repetindo somente com ação.', update.status, firstError.slice(0, 500));
+      delete payload.status;
       statusUpdated = false;
-
-      const fallbackBody = validateMovideskPayload(patchBody);
-      updateRes = await movideskFetch('tickets', { id: targetNumericId }, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify(fallbackBody),
+      update = await movideskRequest({ id: targetId }, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
       });
     }
 
-    if (!updateRes.ok) {
-      const finalErr = await updateRes.text().catch(() => "");
-      console.error("Erro no PATCH Movidesk:", updateRes.status, finalErr);
+    if (!update.ok) {
+      const details = (await update.text().catch(() => '')).slice(0, 1000);
       return res.status(502).json({
-        success: false,
-        error: `Movidesk respondeu com status ${updateRes.status}: ${finalErr || 'Falha ao atualizar chamado no Movidesk.'}`,
+        error: `Movidesk recusou a atualização (status ${update.status}).`,
+        details,
       });
     }
 
     return res.status(200).json({
       success: true,
       ticket: cleanId,
+      movideskId: targetId,
+      statusUpdated,
       message: statusUpdated
-        ? `Laudo e dados enviados com sucesso para o Chamado #${cleanId} no Movidesk!`
-        : `Laudo e evidências incluídos com sucesso no Chamado #${cleanId}!`,
+        ? `Laudo enviado e status atualizado no chamado #${cleanId}.`
+        : `Laudo enviado ao chamado #${cleanId}.`,
     });
-  } catch (error) {
-    return sendApiError(res, error, "Erro ao exportar laudo para o Movidesk.");
+  } catch (error: any) {
+    console.error('Erro ao exportar para o Movidesk:', error);
+    if (error?.name === 'AbortError') {
+      return res.status(504).json({ error: 'A API do Movidesk demorou demais para responder.' });
+    }
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : 'Erro ao exportar laudo para o Movidesk.',
+      details: error?.details,
+    });
   }
 }
