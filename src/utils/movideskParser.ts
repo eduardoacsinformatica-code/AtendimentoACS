@@ -491,10 +491,13 @@ export function validateMovideskPayload<T extends Record<string, any>>(payload: 
 
   const validated: any = { ...payload };
 
+  // Remove 'id' from PATCH body as it causes validation error in Movidesk API
+  delete validated.id;
+
   if (Array.isArray(validated.actions)) {
     validated.actions = validated.actions.map((action: any) => {
       if (!action || typeof action !== 'object') {
-        return { type: 2, actionType: 'Public' };
+        return { type: 2, description: '', origin: 2 };
       }
 
       let typeVal = action.type;
@@ -502,20 +505,14 @@ export function validateMovideskPayload<T extends Record<string, any>>(payload: 
         if (typeVal === "1" || typeVal === "2") {
           typeVal = Number(typeVal);
         } else {
-          // Padrão correto para ações públicas (2)
           typeVal = 2;
         }
       }
 
-      // Se actionType for Public ou estiver em branco, garante tipo 2 (Ação Pública)
-      if (action.actionType === 'Public' || !action.actionType) {
-        typeVal = 2;
-      }
-
       return {
-        ...action,
         type: typeVal,
-        actionType: action.actionType || 'Public',
+        description: action.description || '',
+        origin: action.origin || 2,
       };
     });
   }
@@ -541,19 +538,15 @@ export async function exportReportToMovidesk(formData: ReportData, token: string
       }),
     });
 
-    const json = await response.json().catch(() => null);
+    if (response.ok) {
+      const json = await response.json().catch(() => null);
 
-    if (response.ok && json && json.success) {
-      return json.message || `Laudo enviado com sucesso para o chamado #${formData.ticket}!`;
+      if (json && json.success) {
+        return json.message || `Laudo enviado com sucesso para o chamado #${formData.ticket}!`;
+      }
     }
-
-    if (json && json.error && !json.error.includes('Failed to fetch')) {
-      throw new Error(json.error);
-    }
-  } catch (err: any) {
-    if (err?.message && !err.message.includes('Failed to fetch') && !err.message.includes('404')) {
-      throw err;
-    }
+  } catch {
+    // Se o backend/proxy falhar ou retornar 502 no Vercel, prossegue automaticamente para o envio direto via navegador
   }
 
   // 2. Client-side Direct Fallback
@@ -657,11 +650,9 @@ export async function exportReportToMovidesk(formData: ReportData, token: string
   `;
 
   let patchBody: any = {
-    id: targetNumericId,
     actions: [
       {
         type: 2,
-        actionType: 'Public',
         description: htmlAction,
         origin: 2,
       },

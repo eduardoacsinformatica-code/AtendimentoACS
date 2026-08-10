@@ -232,17 +232,17 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
 
       try {
         const res = await fetch(`/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}&token=${encodeURIComponent(token)}`);
-        const json = await res.json().catch(() => null);
-        if (res.ok && json) {
-          data = json;
-        } else if (json && json.error) {
-          apiErrorMessage = json.error;
+        if (res.ok) {
+          const json = await res.json().catch(() => null);
+          if (json && (json.ticket || json.cliente)) {
+            data = json;
+          }
         }
       } catch {
         // Proxy call failed
       }
 
-      if (!data && !apiErrorMessage) {
+      if (!data) {
         try {
           data = await fetchDirectMovideskTicket(ticketNum, token);
         } catch (directErr: any) {

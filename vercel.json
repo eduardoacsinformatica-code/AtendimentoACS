@@ -2,11 +2,11 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/api/cnpj/:cnpj",
-      "destination": "/api/cnpj/[cnpj]"
+      "source": "/api/(.*)",
+      "destination": "/api"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
