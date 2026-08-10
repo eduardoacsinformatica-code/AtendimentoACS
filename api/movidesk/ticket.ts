@@ -33,6 +33,10 @@ export default async function handler(req: any, res: any) {
     }
 
     const cleanId = String(id).trim();
+    if (!cleanId || cleanId.length > 50) {
+      return res.status(400).json({ error: "Número do Chamado/Protocolo inválido." });
+    }
+
     const isInt32 = /^\d{1,9}$/.test(cleanId) && Number(cleanId) > 0 && Number(cleanId) <= 2147483647;
     const headers = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -50,7 +54,7 @@ export default async function handler(req: any, res: any) {
 
         const response = await fetch(directUrl, { headers });
         if (response.ok) {
-          const data = await response.json();
+          const data = await response.json().catch(() => null);
           const candidate = Array.isArray(data) ? data[0] : data;
           if (candidate && (candidate.id || candidate.protocol)) {
             ticket = candidate;
@@ -72,11 +76,24 @@ export default async function handler(req: any, res: any) {
       )}&$filter=${encodeURIComponent(filterExpr)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
 
       const filterRes = await fetch(filterUrl, { headers });
-      if (filterRes.ok) {
-        const filterData = await filterRes.json();
-        if (Array.isArray(filterData) && filterData.length > 0) {
-          ticket = filterData[0];
+      if (!filterRes.ok) {
+        const errText = await filterRes.text().catch(() => "");
+        let errorMsg = `Erro ${filterRes.status} retornado pelo Movidesk.`;
+        if (filterRes.status === 401) {
+          errorMsg = "Token do Movidesk inválido ou não autorizado.";
+        } else if (filterRes.status === 400) {
+          errorMsg = `Consulta inválida no Movidesk (${errText || "verifique o número do chamado"}).`;
+        } else if (filterRes.status === 429) {
+          errorMsg = "Limite de requisições excedido no Movidesk. Aguarde um momento e tente novamente.";
+        } else if (filterRes.status >= 500) {
+          errorMsg = "O serviço do Movidesk está indisponível ou instável no momento.";
         }
+        return res.status(filterRes.status >= 400 && filterRes.status < 600 ? filterRes.status : 500).json({ error: errorMsg });
+      }
+
+      const filterData = await filterRes.json().catch(() => null);
+      if (Array.isArray(filterData) && filterData.length > 0) {
+        ticket = filterData[0];
       }
     }
 

@@ -187,6 +187,10 @@ app.get("/api/movidesk/ticket", async (req, res) => {
     }
 
     const cleanId = String(id).trim();
+    if (!cleanId || cleanId.length > 50) {
+      return res.status(400).json({ error: "Número do Chamado/Protocolo inválido." });
+    }
+
     const isInt32 = /^\d{1,9}$/.test(cleanId) && Number(cleanId) > 0 && Number(cleanId) <= 2147483647;
     let ticket: any = null;
 
@@ -198,7 +202,7 @@ app.get("/api/movidesk/ticket", async (req, res) => {
 
         const directRes = await fetch(directUrl);
         if (directRes.ok) {
-          const directData = await directRes.json();
+          const directData = await directRes.json().catch(() => null);
           const candidate = Array.isArray(directData) ? directData[0] : directData;
           if (candidate && (candidate.id || candidate.protocol)) {
             ticket = candidate;
@@ -219,11 +223,24 @@ app.get("/api/movidesk/ticket", async (req, res) => {
       )}&$filter=${encodeURIComponent(filterExpr)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
 
       const filterRes = await fetch(filterUrl);
-      if (filterRes.ok) {
-        const filterData = await filterRes.json();
-        if (Array.isArray(filterData) && filterData.length > 0) {
-          ticket = filterData[0];
+      if (!filterRes.ok) {
+        const errText = await filterRes.text().catch(() => "");
+        let errorMsg = `Erro ${filterRes.status} retornado pelo Movidesk.`;
+        if (filterRes.status === 401) {
+          errorMsg = "Token do Movidesk inválido ou não autorizado.";
+        } else if (filterRes.status === 400) {
+          errorMsg = `Consulta inválida no Movidesk (${errText || "verifique o número do chamado"}).`;
+        } else if (filterRes.status === 429) {
+          errorMsg = "Limite de requisições excedido no Movidesk. Aguarde um momento e tente novamente.";
+        } else if (filterRes.status >= 500) {
+          errorMsg = "O serviço do Movidesk está indisponível ou instável no momento.";
         }
+        return res.status(filterRes.status >= 400 && filterRes.status < 600 ? filterRes.status : 500).json({ error: errorMsg });
+      }
+
+      const filterData = await filterRes.json().catch(() => null);
+      if (Array.isArray(filterData) && filterData.length > 0) {
+        ticket = filterData[0];
       }
     }
 

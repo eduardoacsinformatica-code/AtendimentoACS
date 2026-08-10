@@ -2,7 +2,8 @@ import { ReportData } from '../types';
 
 export const decodeHtmlEntities = (str: string): string => {
   if (!str) return "";
-  return str
+  const input = typeof str !== "string" ? String(str) : str;
+  return input
     .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
     .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/&aacute;/gi, "á")
@@ -45,7 +46,8 @@ export const decodeHtmlEntities = (str: string): string => {
 
 export const stripHtml = (html: string): string => {
   if (!html) return "";
-  const clean = html
+  const input = typeof html !== "string" ? String(html) : html;
+  const clean = input
     .replace(/<br\s*[\/]?>/gi, "\n")
     .replace(/<\/p>/gi, "\n\n")
     .replace(/<\/div>/gi, "\n")
@@ -60,9 +62,10 @@ export const stripHtml = (html: string): string => {
 
 export const extractOnlyDescription = (text: string): string => {
   if (!text) return "";
-  let clean = text.trim();
+  const input = typeof text !== "string" ? String(text) : text;
+  let clean = input.trim();
 
-  const descPattern = /(?:[*_#\s\w\d\p{Extended_Pictographic}]*?)(?:Descri[çc][ãa]o\s+(?:do\s+Atendimento|do\s+Chamado|de\s+Atendimento|do\s+Servi[çc]o|do\s+Problema)|Descri[çc][ãa]o)\s*:\s*[*_]*\s*([\s\S]+)/iu;
+  const descPattern = /(?:[^\w\s]*?)(?:Descri[çc][ãa]o\s+(?:do\s+Atendimento|do\s+Chamado|de\s+Atendimento|do\s+Servi[çc]o|do\s+Problema)|Descri[çc][ãa]o)\s*:\s*[*_]*\s*([\s\S]+)/i;
 
   const matchDesc = clean.match(descPattern);
 
@@ -76,7 +79,7 @@ export const extractOnlyDescription = (text: string): string => {
     for (const line of lines) {
       const trimmed = line.trim();
       const isHeaderLine =
-        /^(?:[*_#\s\w\d\p{Extended_Pictographic}]*?)(?:Agendamento\s+T[eé]cnico|T[eé]cnico\s+Respons[aá]vel|Raz[aã]o\s+Social|Nome\s+Fantasia|CNPJ|Endere[cç]o|Contato|Ticket)\s*:\s*/iu.test(trimmed) ||
+        /^(?:[^\w\s]*?)(?:Agendamento\s+T[eé]cnico|T[eé]cnico\s+Respons[aá]vel|Raz[aã]o\s+Social|Nome\s+Fantasia|CNPJ|Endere[cç]o|Contato|Ticket)\s*:\s*/i.test(trimmed) ||
         /^[*_]*\s*Agendamento\s+T[eé]cnico\s*[–\-]/i.test(trimmed);
 
       if (!pastHeaders && isHeaderLine) {
