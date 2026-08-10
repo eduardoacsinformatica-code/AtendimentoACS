@@ -90,22 +90,20 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
     setLoadingAgents(true);
     setAgentsError(null);
     try {
-      const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
-      try {
-        const res = await fetch(`/api/movidesk/agents?token=${encodeURIComponent(token)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.agents && Array.isArray(data.agents)) {
-            setAgents(data.agents);
-            return;
-          }
-        }
-      } catch {
-        // Fallback to direct client-side fetch
+      const token = settings.movideskToken || '';
+      let url = '/api/movidesk/agents';
+      if (token) {
+        url += `?token=${encodeURIComponent(token)}`;
       }
 
-      const directAgents = await fetchDirectMovideskAgents(token);
-      setAgents(directAgents);
+      const res = await fetch(url);
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data || !Array.isArray(data.agents)) {
+        throw new Error(data?.error || 'Erro ao carregar lista de atendentes.');
+      }
+
+      setAgents(data.agents);
     } catch (err) {
       setAgentsError(err instanceof Error ? err.message : 'Erro ao conectar ao Movidesk.');
     } finally {
@@ -123,35 +121,28 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
     setLoadingTickets(true);
     setTicketsError(null);
     try {
-      const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
-      try {
-        let url = `/api/movidesk/tickets?token=${encodeURIComponent(token)}`;
-        if (agent) {
-          if (agent.id && agent.id !== 'all') {
-            url += `&agentId=${encodeURIComponent(agent.id)}`;
-          }
-          url += `&agentName=${encodeURIComponent(agent.name)}`;
-        }
+      const token = settings.movideskToken || '';
+      const params = new URLSearchParams();
+      if (token) params.set('token', token);
 
-        const res = await fetch(url);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.tickets && Array.isArray(data.tickets)) {
-            setTickets(data.tickets);
-            setDateRangeInfo('Todos os chamados (sem limite de data)');
-            return;
-          }
+      if (agent) {
+        if (agent.id && agent.id !== 'all') {
+          params.set('agentId', agent.id);
         }
-      } catch {
-        // Fallback to direct fetch
+        params.set('agentName', agent.name);
       }
 
-      const directTickets = await fetchDirectMovideskTickets(
-        token,
-        agent?.id,
-        agent?.name
-      );
-      setTickets(directTickets as any);
+      const queryString = params.toString();
+      const url = `/api/movidesk/tickets${queryString ? `?${queryString}` : ''}`;
+
+      const res = await fetch(url);
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data || !Array.isArray(data.tickets)) {
+        throw new Error(data?.error || 'Erro ao consultar chamados.');
+      }
+
+      setTickets(data.tickets);
       setDateRangeInfo('Todos os chamados (sem limite de data)');
     } catch (err) {
       setTicketsError(err instanceof Error ? err.message : 'Erro ao consultar chamados.');
@@ -163,28 +154,17 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
   const handleImportSingleTicket = async (ticketItem: MovideskTicketItem) => {
     setLoadingTickets(true);
     try {
-      const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
+      const token = settings.movideskToken || '';
       const ticketNum = ticketItem.id || ticketItem.protocol;
-      let data: any = null;
-
-      try {
-        const res = await fetch(`/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}&token=${encodeURIComponent(token)}`);
-        if (res.ok) {
-          data = await res.json();
-        }
-      } catch {
-        // Proxy failed
+      let url = `/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}`;
+      if (token) {
+        url += `&token=${encodeURIComponent(token)}`;
       }
 
-      if (!data) {
-        try {
-          data = await fetchDirectMovideskTicket(ticketNum, token);
-        } catch {
-          // Direct fetch failed
-        }
-      }
+      const res = await fetch(url);
+      const data = await res.json().catch(() => null);
 
-      if (data) {
+      if (res.ok && data) {
         onSelectTicket({
           ticket: data.ticket || ticketNum,
           cliente: data.cliente || ticketItem.cliente,
@@ -199,6 +179,8 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
         onClose();
         return;
       }
+    } catch {
+      // ignore
     } finally {
       setLoadingTickets(false);
     }
@@ -225,33 +207,18 @@ export const MovideskImportModal: React.FC<MovideskImportModalProps> = ({
     setDirectError(null);
 
     try {
-      const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
+      const token = settings.movideskToken || '';
       const ticketNum = directTicketId.trim();
-      let data: any = null;
-      let apiErrorMessage = '';
-
-      try {
-        const res = await fetch(`/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}&token=${encodeURIComponent(token)}`);
-        if (res.ok) {
-          const json = await res.json().catch(() => null);
-          if (json && (json.ticket || json.cliente)) {
-            data = json;
-          }
-        }
-      } catch {
-        // Proxy call failed
+      let url = `/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}`;
+      if (token) {
+        url += `&token=${encodeURIComponent(token)}`;
       }
 
-      if (!data) {
-        try {
-          data = await fetchDirectMovideskTicket(ticketNum, token);
-        } catch (directErr: any) {
-          throw new Error(directErr?.message || 'Chamado não encontrado.');
-        }
-      }
+      const res = await fetch(url);
+      const data = await res.json().catch(() => null);
 
-      if (!data || (!data.ticket && !data.cliente)) {
-        throw new Error(apiErrorMessage || 'Chamado não encontrado.');
+      if (!res.ok || !data || (!data.ticket && !data.cliente)) {
+        throw new Error(data?.error || `Chamado #${ticketNum} não encontrado.`);
       }
 
       onSelectTicket({

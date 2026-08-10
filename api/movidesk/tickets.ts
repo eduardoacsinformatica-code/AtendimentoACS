@@ -10,7 +10,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const urlObj = new URL(req.url || "", "http://localhost");
-    const token = req.query?.token || urlObj.searchParams.get("token") || process.env.MOVIDESK_API_TOKEN || "75762c40-5399-4b83-b958-c265fbf5d6fb";
+    const token = req.query?.token || urlObj.searchParams.get("token") || process.env.MOVIDESK_API_TOKEN;
     const agentIdRaw = req.query?.agentId || urlObj.searchParams.get("agentId");
     const agentId = agentIdRaw ? String(agentIdRaw).trim() : "";
     const agentNameRaw = req.query?.agentName || urlObj.searchParams.get("agentName");

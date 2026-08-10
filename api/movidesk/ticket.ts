@@ -22,17 +22,18 @@ export default async function handler(req: any, res: any) {
     }
 
     const id = queryParams.id || queryParams.ticket;
-    const token = queryParams.token || process.env.MOVIDESK_API_TOKEN || "75762c40-5399-4b83-b958-c265fbf5d6fb";
+    const token = queryParams.token || process.env.MOVIDESK_API_TOKEN;
 
     if (!id) {
       return res.status(400).json({ error: "Número do Ticket/Chamado é obrigatório." });
     }
 
     if (!token) {
-      return res.status(400).json({ error: "Chave de API do Movidesk não informada." });
+      return res.status(400).json({ error: "Chave de API do Movidesk não informada. Configure a variável MOVIDESK_API_TOKEN ou informe nas configurações." });
     }
 
     const cleanId = String(id).trim();
+    const isInt32 = /^\d{1,9}$/.test(cleanId) && Number(cleanId) > 0 && Number(cleanId) <= 2147483647;
     const headers = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "Accept": "application/json",
@@ -40,28 +41,29 @@ export default async function handler(req: any, res: any) {
 
     let ticket: any = null;
 
-    // 1. Try direct ID query first
-    try {
-      const directUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-        token
-      )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
+    // 1. Try direct ID query first if valid Int32
+    if (isInt32) {
+      try {
+        const directUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
+          token
+        )}&id=${encodeURIComponent(cleanId)}&$expand=clients,owner,createdBy,actions,customFieldValues`;
 
-      const response = await fetch(directUrl, { headers });
-      if (response.ok) {
-        const data = await response.json();
-        const candidate = Array.isArray(data) ? data[0] : data;
-        if (candidate && (candidate.id || candidate.protocol)) {
-          ticket = candidate;
+        const response = await fetch(directUrl, { headers });
+        if (response.ok) {
+          const data = await response.json();
+          const candidate = Array.isArray(data) ? data[0] : data;
+          if (candidate && (candidate.id || candidate.protocol)) {
+            ticket = candidate;
+          }
         }
+      } catch (err) {
+        console.warn("Movidesk direct ID fetch failed, trying filter:", err);
       }
-    } catch (err) {
-      console.warn("Movidesk direct ID fetch failed, trying filter:", err);
     }
 
     // 2. Fallback: Query by protocol or id filter
     if (!ticket || (!ticket.id && !ticket.protocol)) {
-      const isNum = !isNaN(Number(cleanId));
-      const filterExpr = isNum
+      const filterExpr = isInt32
         ? `protocol eq '${cleanId}' or id eq ${cleanId}`
         : `protocol eq '${cleanId}'`;
 

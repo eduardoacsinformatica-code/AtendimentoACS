@@ -64,7 +64,7 @@ app.get("/api/cnpj/:cnpj", async (req, res) => {
 // API Route: Movidesk Agents List
 app.get("/api/movidesk/agents", async (req, res) => {
   try {
-    const token = (req.query.token as string) || process.env.MOVIDESK_API_TOKEN || "75762c40-5399-4b83-b958-c265fbf5d6fb";
+    const token = (req.query.token as string) || process.env.MOVIDESK_API_TOKEN;
 
     if (!token) {
       return res.status(400).json({ error: "Chave de API do Movidesk não informada." });
@@ -122,12 +122,12 @@ app.get("/api/movidesk/agents", async (req, res) => {
 // API Route: Movidesk Tickets by Agent
 app.get("/api/movidesk/tickets", async (req, res) => {
   try {
-    const token = (req.query.token as string) || process.env.MOVIDESK_API_TOKEN || "75762c40-5399-4b83-b958-c265fbf5d6fb";
+    const token = (req.query.token as string) || process.env.MOVIDESK_API_TOKEN;
     const agentId = req.query.agentId ? String(req.query.agentId).trim() : "";
     const agentName = req.query.agentName ? String(req.query.agentName).trim().toLowerCase() : "";
 
     if (!token) {
-      return res.status(400).json({ error: "Chave de API do Movidesk não informada." });
+      return res.status(400).json({ error: "Chave de API do Movidesk não informada. Configure MOVIDESK_API_TOKEN nas variáveis de ambiente." });
     }
 
     const movideskUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
@@ -176,7 +176,7 @@ app.get("/api/movidesk/tickets", async (req, res) => {
 app.get("/api/movidesk/ticket", async (req, res) => {
   try {
     const id = req.query.id || req.query.ticket;
-    const token = (req.query.token as string) || process.env.MOVIDESK_API_TOKEN || "75762c40-5399-4b83-b958-c265fbf5d6fb";
+    const token = (req.query.token as string) || process.env.MOVIDESK_API_TOKEN;
 
     if (!id) {
       return res.status(400).json({ error: "Número do Ticket/Chamado é obrigatório." });
@@ -275,7 +275,7 @@ app.post("/api/movidesk/export", async (req, res) => {
       return res.status(400).json({ error: "O campo ticket é obrigatório para atualização no Movidesk." });
     }
 
-    const token = userToken || process.env.MOVIDESK_API_TOKEN || "75762c40-5399-4b83-b958-c265fbf5d6fb";
+    const token = userToken || process.env.MOVIDESK_API_TOKEN;
     const cleanId = String(ticket).trim();
     const isInt32 = /^\d{1,9}$/.test(cleanId) && Number(cleanId) > 0 && Number(cleanId) <= 2147483647;
     let targetNumericId: number | null = null;

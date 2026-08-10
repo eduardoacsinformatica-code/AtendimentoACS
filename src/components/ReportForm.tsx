@@ -275,33 +275,20 @@ export const ReportForm: React.FC<ReportFormProps> = ({
     setMovideskMessage(null);
 
     try {
-      const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
-      let data: any = null;
-      let apiErrorMessage = '';
-
-      try {
-        const res = await fetch(`/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}&token=${encodeURIComponent(token)}`);
-        if (res.ok) {
-          const json = await res.json().catch(() => null);
-          if (json && (json.ticket || json.cliente)) {
-            data = json;
-          }
-        }
-      } catch {
-        // Proxy network error
+      const token = settings.movideskToken || '';
+      let url = `/api/movidesk/ticket?id=${encodeURIComponent(ticketNum)}`;
+      if (token) {
+        url += `&token=${encodeURIComponent(token)}`;
       }
 
-      if (!data) {
-        try {
-          data = await fetchDirectMovideskTicket(ticketNum, token);
-        } catch (directErr: any) {
-          throw new Error(directErr?.message || `Chamado #${ticketNum} não foi encontrado no Movidesk.`);
-        }
+      const res = await fetch(url);
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok || !json || (!json.ticket && !json.cliente)) {
+        throw new Error(json?.error || `Chamado #${ticketNum} não foi encontrado no Movidesk.`);
       }
 
-      if (!data) {
-        throw new Error(apiErrorMessage || `Chamado #${ticketNum} não foi encontrado no Movidesk.`);
-      }
+      const data = json;
 
       setFormData((prev) => ({
         ...prev,
@@ -368,7 +355,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({
     setMovideskMessage(null);
 
     try {
-      const token = settings.movideskToken || '75762c40-5399-4b83-b958-c265fbf5d6fb';
+      const token = settings.movideskToken || '';
       const msg = await exportReportToMovidesk(formData, token);
       setMovideskMessage({
         type: 'success',

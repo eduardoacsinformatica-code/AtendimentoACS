@@ -14,7 +14,7 @@ const DEFAULT_SETTINGS: TechSettings = {
   defaultEmpresa: 'ACS Informática - Suporte Técnico',
   autoFormatCnpj: true,
   whatsappFormatStyle: 'atual',
-  movideskToken: '75762c40-5399-4b83-b958-c265fbf5d6fb',
+  movideskToken: '',
   movideskDomain: 'acsautomacao.movidesk.com',
 };
 
