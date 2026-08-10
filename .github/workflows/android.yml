@@ -1,0 +1,61 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Configure API URL for Android
+        env:
+          API_BASE_URL: ${{ secrets.ATENDIMENTOACS_API_URL }}
+        run: |
+          if [ -z "$API_BASE_URL" ]; then
+            echo "ATENDIMENTOACS_API_URL secret is required."
+            exit 1
+          fi
+          echo "VITE_API_BASE_URL=$API_BASE_URL" >> "$GITHUB_ENV"
+
+      - name: Build web assets
+        run: npm run build:web
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AtendimentoACS-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
