@@ -1,6 +1,7 @@
 import { ReportData } from "../../src/types";
 
 import { validateMovideskPayload } from "../../src/utils/movideskParser";
+import { getMovideskToken, movideskFetch, movideskJson, sendApiError } from "../../src/server_movidesk";
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -16,10 +17,9 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const body: Partial<ReportData> & { token?: string } = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
+    const body: Partial<ReportData> = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
     const {
       ticket,
-      token: userToken,
       cliente,
       acompanhado,
       fato,
@@ -31,14 +31,10 @@ export default async function handler(req: any, res: any) {
       tecnico
     } = body;
 
-    const token = userToken || process.env.MOVIDESK_API_TOKEN;
+    getMovideskToken();
 
     if (!ticket) {
       return res.status(400).json({ error: "Número do Ticket/Chamado é obrigatório para exportação." });
-    }
-
-    if (!token) {
-      return res.status(400).json({ error: "Chave de API do Movidesk não informada." });
     }
 
     const cleanId = String(ticket).trim();
@@ -51,39 +47,24 @@ export default async function handler(req: any, res: any) {
 
     let targetNumericId: number | null = null;
 
-    // 1. Try direct ID lookup first if valid Int32
     if (isInt32) {
       try {
-        const directUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-          token
-        )}&id=${encodeURIComponent(cleanId)}`;
-
-        const directRes = await fetch(directUrl, { headers: { Accept: "application/json" } });
-        if (directRes.ok) {
-          const directData = await directRes.json();
-          const candidate = Array.isArray(directData) ? directData[0] : directData;
-          if (candidate && candidate.id) {
-            targetNumericId = candidate.id;
-          }
-        }
-      } catch (err) {
-        console.warn("Direct ticket lookup failed in api/movidesk/export.ts:", err);
+        const directData = await movideskJson('tickets', { id: cleanId });
+        const candidate = Array.isArray(directData) ? directData[0] : directData;
+        if (candidate?.id) targetNumericId = Number(candidate.id);
+      } catch (error) {
+        console.warn(`Busca direta do ticket ${cleanId} para exportação falhou; tentando filtro.`, error);
       }
     }
 
-    // 2. Fallback to filter lookup by protocol or id
     if (!targetNumericId) {
-      const filterExpr = isInt32 ? `protocol eq '${cleanId}' or id eq ${cleanId}` : `protocol eq '${cleanId}'`;
-      const filterUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-        token
-      )}&$filter=${encodeURIComponent(filterExpr)}`;
-
-      const filterRes = await fetch(filterUrl, { headers: { Accept: "application/json" } });
-      if (filterRes.ok) {
-        const filterData = await filterRes.json();
-        if (Array.isArray(filterData) && filterData.length > 0 && filterData[0].id) {
-          targetNumericId = filterData[0].id;
-        }
+      const escapedProtocol = cleanId.replace(/'/g, "''");
+      const filterExpr = isInt32
+        ? `protocol eq '${escapedProtocol}' or id eq ${cleanId}`
+        : `protocol eq '${escapedProtocol}'`;
+      const filterData = await movideskJson('tickets', { '$filter': filterExpr, '$top': 1 });
+      if (Array.isArray(filterData) && filterData[0]?.id) {
+        targetNumericId = Number(filterData[0].id);
       }
     }
 
@@ -91,7 +72,6 @@ export default async function handler(req: any, res: any) {
       return res.status(404).json({ error: `Chamado #${cleanId} não foi localizado no Movidesk para atualização.` });
     }
 
-    // Build rich HTML action description
     const photosList = Array.isArray(fotos) ? fotos : [];
     const htmlAction = `
       <div style="font-family: Arial, sans-serif; font-size: 14px; color: #1e293b; line-height: 1.6; border: 1px solid #cbd5e0; border-radius: 8px; padding: 16px; background-color: #f8fafc; max-width: 700px;">
@@ -150,7 +130,6 @@ export default async function handler(req: any, res: any) {
       </div>
     `;
 
-    // Movidesk PATCH body
     let patchBody: any = {
       id: targetNumericId,
       actions: [
@@ -180,8 +159,7 @@ export default async function handler(req: any, res: any) {
 
     patchBody = validateMovideskPayload(patchBody);
 
-    const updateUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(token)}&id=${targetNumericId}`;
-    let updateRes = await fetch(updateUrl, {
+    let updateRes = await movideskFetch('tickets', { id: targetNumericId }, {
       method: "PATCH",
       headers,
       body: JSON.stringify(patchBody),
@@ -189,13 +167,12 @@ export default async function handler(req: any, res: any) {
 
     let statusUpdated = statusAttempted;
 
-    // If PATCH failed and we tried updating status, retry without status to guarantee Laudo action is added
     if (!updateRes.ok && patchBody.status) {
       delete patchBody.status;
       statusUpdated = false;
 
       const fallbackBody = validateMovideskPayload(patchBody);
-      updateRes = await fetch(updateUrl, {
+      updateRes = await movideskFetch('tickets', { id: targetNumericId }, {
         method: "PATCH",
         headers,
         body: JSON.stringify(fallbackBody),
@@ -205,7 +182,7 @@ export default async function handler(req: any, res: any) {
     if (!updateRes.ok) {
       const finalErr = await updateRes.text().catch(() => "");
       console.error("Erro no PATCH Movidesk:", updateRes.status, finalErr);
-      return res.status(200).json({
+      return res.status(502).json({
         success: false,
         error: `Movidesk respondeu com status ${updateRes.status}: ${finalErr || 'Falha ao atualizar chamado no Movidesk.'}`,
       });
@@ -219,9 +196,6 @@ export default async function handler(req: any, res: any) {
         : `Laudo e evidências incluídos com sucesso no Chamado #${cleanId}!`,
     });
   } catch (error) {
-    console.error("Erro ao exportar laudo para o Movidesk:", error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : "Erro interno ao enviar para o Movidesk.",
-    });
+    return sendApiError(res, error, "Erro ao exportar laudo para o Movidesk.");
   }
 }
