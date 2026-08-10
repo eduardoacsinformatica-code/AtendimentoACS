@@ -36,6 +36,12 @@ function mapTicket(ticket: any, requested: string) {
     if (match) cnpj = match[0];
   }
 
+  const emailCliente = String(
+    client?.email ||
+    ticket?.createdBy?.email ||
+    ''
+  ).trim();
+
   let tecnico = ticket?.owner?.name || ticket?.owner?.businessName || ticket?.createdBy?.name || ticket?.createdBy?.businessName || '';
   const techField = fields.find((field: any) => Number(field?.customFieldId) === 221237);
   if (techField) {
@@ -54,6 +60,7 @@ function mapTicket(ticket: any, requested: string) {
     ticket: String(ticket?.protocol || ticket?.id || requested),
     cliente: client?.businessName || client?.name || ticket?.createdBy?.businessName || ticket?.createdBy?.name || 'Cliente não informado',
     cnpj: formatCnpj(cnpj),
+    emailCliente,
     tecnico,
     acompanhado: client?.name || '',
     descricaoChamado: descricao,
@@ -64,6 +71,7 @@ function mapTicket(ticket: any, requested: string) {
       id: ticket?.id,
       protocol: ticket?.protocol,
       status: ticket?.status,
+      clientId: client?.id,
     },
   };
 }
@@ -128,7 +136,6 @@ export default async function handler(req: any, res: any) {
     let internalId = isInternalId ? cleanId : '';
     let ticket: any = null;
 
-    // Para protocolos longos, primeiro localiza somente o ID interno.
     if (!internalId) {
       const escaped = cleanId.replace(/'/g, "''");
       const found = await movideskRequest({
@@ -144,7 +151,6 @@ export default async function handler(req: any, res: any) {
       return res.status(404).json({ error: `Chamado #${cleanId} não foi encontrado no Movidesk.` });
     }
 
-    // Detalhes completos são buscados apenas depois que temos o ID interno.
     const detailed = await movideskRequest({
       id: internalId,
       '$expand': 'clients,owner,createdBy,actions,customFieldValues',
