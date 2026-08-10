@@ -1,73 +1,54 @@
+import { movideskJson, sendApiError } from '../../src/server_movidesk';
+
 export default async function handler(req: any, res: any) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Método não permitido. Use GET.' });
   }
 
   try {
-    const urlObj = new URL(req.url || "", "http://localhost");
-    const token = req.query?.token || urlObj.searchParams.get("token") || process.env.MOVIDESK_API_TOKEN;
-
-    if (!token) {
-      return res.status(400).json({ error: "Chave de API do Movidesk não informada." });
-    }
-
-    const headers = {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Accept": "application/json",
-    };
-
-    // Query Movidesk Persons endpoint filtered for personType = 1 (Agents)
-    const movideskUrl = `https://api.movidesk.com/public/v1/persons?token=${encodeURIComponent(
-      token
-    )}&$filter=personType eq 1&$select=id,name,businessName,email`;
-
-    const response = await fetch(movideskUrl, { headers });
-
     let agents: Array<{ id: string; name: string }> = [];
 
-    if (response.ok) {
-      const data = await response.json();
+    try {
+      const data = await movideskJson('persons', {
+        '$filter': 'personType eq 1',
+        '$select': 'id,name,businessName,email',
+      });
+
       if (Array.isArray(data)) {
-        agents = data.map((p: any) => ({
-          id: String(p.id),
-          name: p.name || p.businessName || "Atendente Sem Nome",
-        }));
+        agents = data
+          .filter((p: any) => p?.id)
+          .map((p: any) => ({
+            id: String(p.id),
+            name: p.name || p.businessName || 'Atendente sem nome',
+          }));
       }
+    } catch (error) {
+      console.warn('Falha ao listar persons no Movidesk; tentando extrair atendentes dos tickets.', error);
     }
 
-    // Fallback if persons list is empty
     if (agents.length === 0) {
-      const recentTicketsUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
-        token
-      )}&$select=id,owner&$expand=owner&$top=50`;
+      const tickets = await movideskJson('tickets', {
+        '$select': 'id,owner',
+        '$expand': 'owner',
+        '$orderby': 'createdDate desc',
+        '$top': 100,
+      });
 
-      const ticketRes = await fetch(recentTicketsUrl);
-      if (ticketRes.ok) {
-        const ticketsData = await ticketRes.json();
-        if (Array.isArray(ticketsData)) {
-          const agentMap = new Map<string, string>();
-          ticketsData.forEach((t: any) => {
-            if (t.owner?.id && t.owner?.name) {
-              agentMap.set(String(t.owner.id), t.owner.name);
-            }
-          });
-          agentMap.forEach((name, id) => {
-            agents.push({ id, name });
-          });
+      const map = new Map<string, string>();
+      if (Array.isArray(tickets)) {
+        for (const ticket of tickets) {
+          if (ticket?.owner?.id && (ticket.owner.name || ticket.owner.businessName)) {
+            map.set(String(ticket.owner.id), ticket.owner.name || ticket.owner.businessName);
+          }
         }
       }
+      agents = Array.from(map, ([id, name]) => ({ id, name }));
     }
 
-    agents.sort((a, b) => a.name.localeCompare(b.name));
-
+    agents.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     return res.status(200).json({ agents });
   } catch (error) {
-    console.error("Erro ao buscar atendentes Movidesk:", error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : "Erro ao carregar lista de atendentes.",
-    });
+    return sendApiError(res, error, 'Erro ao buscar atendentes no Movidesk.');
   }
 }
