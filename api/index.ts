@@ -132,7 +132,7 @@ app.get("/api/movidesk/tickets", async (req, res) => {
 
     const movideskUrl = `https://api.movidesk.com/public/v1/tickets?token=${encodeURIComponent(
       token
-    )}&$select=id,protocol,subject,createdDate,status,owner,createdBy&$expand=clients,owner,createdBy,actions,customFieldValues&$orderby=createdDate desc&$top=200`;
+    )}&$select=id,protocol,subject,createdDate,status,owner,createdBy&$expand=owner,createdBy,clients&$orderby=createdDate desc&$top=100`;
 
     const response = await fetch(movideskUrl);
     if (!response.ok) {
