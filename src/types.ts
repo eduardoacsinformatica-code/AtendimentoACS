@@ -27,6 +27,8 @@ export interface ReportData {
   incluirAssinatura: boolean;
   empresaAssinatura: string;
   whatsappDestinatario: string; // Optional phone number
+  emailCliente?: string; // E-mail principal importado do cliente no Movidesk
+  enviarEmailCliente?: boolean; // Solicita envio do laudo por e-mail via gatilho do Movidesk
   fotos: string[]; // Base64 or Data URL array of attached photos
   assinaturaCliente?: string; // Base64 or Data URL of client digital signature
 }
